@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Environment Settings</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+
+<body class="body settings-page-body">
+  <main class="container settings-page" aria-label="Environment settings page">
+    <div class="azure-shell-header" role="presentation">
+      <span class="azure-shell-product">CodexJay External ID</span>
+      <span class="azure-shell-meta" data-i18n="settings.subtitle">Effective runtime values currently configured for this demo</span>
+    </div>
+
+    <section class="settings-inner" aria-label="Configured environment variables">
+      <h1 class="settings-title" data-i18n="settings.title">Environment Settings</h1>
+      <p class="settings-subtitle" data-i18n="settings.subtitle">Effective runtime values currently configured for this demo</p>
+
+      <div class="settings-toolbar">
+        <div id="settingsUpdated" class="settings-last-updated" data-i18n="settings.updated">Last refreshed</div>
+        <div class="settings-actions">
+          <button id="refreshSettingsBtn" type="button" class="settings-btn" data-i18n="settings.refresh">Refresh</button>
+          <a href="/" class="settings-btn" data-i18n="settings.back">Back to Login</a>
+        </div>
+      </div>
+
+      <div id="settingsGroups" aria-live="polite" aria-label="Environment variables sections">
+        <div class="settings-table-wrap" role="region" aria-label="Environment variables table">
+          <table class="settings-table">
+            <thead>
+              <tr>
+                <th data-i18n="settings.variable">Variable</th>
+                <th data-i18n="settings.value">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="2" class="settings-empty" data-i18n="settings.loading">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app-config.js" type="text/javascript"></script>
+  <script src="/i18n.js" type="text/javascript"></script>
+  <script type="text/javascript">
+    const THEME_STORAGE_KEY = "app_theme";
+    const DEFAULT_THEME = "azure-portal";
+    const SUPPORTED_THEMES = ["azure-portal", "enterprise-blue", "fintech-slate"];
+    const SECTION_KEYS = ["app", "entra", "proxy", "ui"];
+    const SECTION_VARIABLES = {
+      app: ["APP_PORT", "APP_ORIGIN", "REDIRECT_URI"],
+      entra: ["CLIENT_ID", "TENANT_ID", "TENANT_SUBDOMAIN", "ENTRA_AUTHORITY_HOST", "AUTHORITY", "LOGIN_SCOPES"],
+      proxy: ["LOCAL_API_PATH", "CORS_PORT", "PROXY_TARGET", "PUBLIC_BASE_API_URL", "ALLOWED_ORIGINS"],
+      ui: ["LOCALE", "THEME"],
+    };
+
+    function applyTheme(theme) {
+      const configured = (window.__APP_CONFIG__ && window.__APP_CONFIG__.THEME) || DEFAULT_THEME;
+      const selectedTheme = SUPPORTED_THEMES.includes(theme) ? theme : configured;
+      document.body.setAttribute("data-theme", selectedTheme);
+    }
+
+    function setUpdatedTimestamp() {
+      const updatedEl = document.getElementById("settingsUpdated");
+      if (!updatedEl) return;
+      const prefix = typeof window.t === "function" ? window.t("settings.updated") : "Last refreshed";
+      updatedEl.textContent = `${prefix}: ${new Date().toLocaleString()}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function getLabel(key, fallback) {
+      return typeof window.t === "function" ? window.t(key) : fallback;
+    }
+
+    function renderTableRows(keys, settings) {
+      return keys.map((key) => {
+        const raw = settings[key];
+        const value = raw === null || raw === undefined || raw === "" ? "(empty)" : String(raw);
+        return `<tr><td class="settings-key">${escapeHtml(key)}</td><td class="settings-value">${escapeHtml(value)}</td></tr>`;
+      }).join("");
+    }
+
+    function renderGroupedSettings(settings) {
+      const container = document.getElementById("settingsGroups");
+      if (!container) return;
+
+      const allKeys = Object.keys(settings || {});
+      if (allKeys.length === 0) {
+        const emptyLabel = getLabel("settings.empty", "No settings available.");
+        container.innerHTML = `<div class="settings-table-wrap"><div class="settings-empty">${escapeHtml(emptyLabel)}</div></div>`;
+        return;
+      }
+
+      const usedKeys = new Set();
+      const sections = SECTION_KEYS.map((sectionName) => {
+        const keys = (SECTION_VARIABLES[sectionName] || []).filter((key) => Object.prototype.hasOwnProperty.call(settings, key));
+        keys.forEach((key) => usedKeys.add(key));
+        return { sectionName, keys };
+      }).filter((section) => section.keys.length > 0);
+
+      const otherKeys = allKeys.filter((key) => !usedKeys.has(key)).sort((a, b) => a.localeCompare(b));
+      if (otherKeys.length > 0) {
+        sections.push({ sectionName: "other", keys: otherKeys });
+      }
+
+      container.innerHTML = sections.map((section) => {
+        const sectionLabel = getLabel(`settings.section.${section.sectionName}`, section.sectionName.toUpperCase());
+        return (
+          `<section class="settings-group" aria-label="${escapeHtml(sectionLabel)}">` +
+          `<h2 class="settings-group-title">${escapeHtml(sectionLabel)}</h2>` +
+          `<div class="settings-table-wrap">` +
+          `<table class="settings-table">` +
+          `<thead><tr>` +
+          `<th>${escapeHtml(getLabel("settings.variable", "Variable"))}</th>` +
+          `<th>${escapeHtml(getLabel("settings.value", "Value"))}</th>` +
+          `</tr></thead>` +
+          `<tbody>${renderTableRows(section.keys, settings)}</tbody>` +
+          `</table>` +
+          `</div>` +
+          `</section>`
+        );
+      }).join("");
+    }
+
+    async function loadSettings() {
+      const container = document.getElementById("settingsGroups");
+      if (container) {
+        const loadingLabel = getLabel("settings.loading", "Loading...");
+        container.innerHTML = `<div class="settings-table-wrap"><div class="settings-empty">${escapeHtml(loadingLabel)}</div></div>`;
+      }
+
+      try {
+        const response = await fetch('/settings-config.json', { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch settings (${response.status})`);
+        }
+
+        const data = await response.json();
+        renderGroupedSettings(data);
+        setUpdatedTimestamp();
+      } catch (error) {
+        const message = error && error.message ? error.message : "Unknown error";
+        const prefix = getLabel("settings.loadFailed", "Unable to load settings");
+        if (container) {
+          container.innerHTML = `<div class="settings-table-wrap"><div class="settings-empty">${escapeHtml(prefix)}: ${escapeHtml(message)}</div></div>`;
+        }
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const configuredTheme = (window.__APP_CONFIG__ && window.__APP_CONFIG__.THEME) || DEFAULT_THEME;
+      const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || configuredTheme;
+      applyTheme(savedTheme);
+
+      if (typeof window.applyTranslations === 'function') {
+        window.applyTranslations();
+      }
+
+      const refreshButton = document.getElementById('refreshSettingsBtn');
+      if (refreshButton) {
+        refreshButton.addEventListener('click', loadSettings);
+      }
+
+      loadSettings();
+    });
+  </script>
+</body>
+
+</html>

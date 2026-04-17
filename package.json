@@ -1,0 +1,30 @@
+{
+  "name": "codexjay-external-id-demo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ports:kill": "node scripts/kill-ports.js",
+    "stop": "node scripts/stop-stack.js",
+    "dev": "node scripts/start-stack.js",
+    "dev:plain": "node scripts/start-stack.js --plain",
+    "start": "npm run ports:kill && npm run start:raw",
+    "start:raw": "node server.js",
+    "start:env": "npm run ports:kill && npm run start:env:raw",
+    "start:env:raw": "node --env-file-if-exists=.env server.js",
+    "cors": "npm run ports:kill && npm run cors:raw",
+    "cors:raw": "node cors.js",
+    "cors:env": "npm run ports:kill && npm run cors:env:raw",
+    "cors:env:raw": "node --env-file-if-exists=.env cors.js",
+    "cors_prod": "npm run ports:kill && npm run cors_prod:raw",
+    "cors_prod:raw": "node cors_prod.js",
+    "cors_prod:env": "npm run ports:kill && npm run cors_prod:env:raw",
+    "cors_prod:env:raw": "node --env-file-if-exists=.env cors_prod.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.1"
+  }
+}

@@ -1,0 +1,512 @@
+{
+  "info": {
+    "_postman_id": "c78494d9-9a82-49ce-a776-df243c15de94",
+    "name": "EEID Native Auth",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "11140130"
+  },
+  "item": [
+    {
+      "name": "Signin - Initiate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();\r",
+              "pm.collectionVariables.set(\"continuation_token\", jsonData.continuation_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{client_id_new}}",
+              "type": "text",
+              "uuid": "9303521a-a023-4946-a3e6-bf5c59016586"
+            },
+            {
+              "key": "challenge_type",
+              "value": "password oob redirect",
+              "type": "text",
+              "uuid": "17ef9fa6-c845-40bb-944a-1c083190ae9a"
+            },
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "text",
+              "uuid": "3ef3ff7b-2c64-44ad-ad76-11e21d47ad7b"
+            },
+            {
+              "key": "capabilities",
+              "value": "registration_required mfa_required",
+              "type": "text",
+              "uuid": "45d789e5-35be-4b11-a446-6ac5d7d38f2b"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{tenant_name}}.ciamlogin.com/{{tenant_id}}/oauth2/v2.0/initiate",
+          "protocol": "https",
+          "host": [
+            "{{tenant_name}}",
+            "ciamlogin",
+            "com"
+          ],
+          "path": [
+            "{{tenant_id}}",
+            "oauth2",
+            "v2.0",
+            "initiate"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "SignIn - Challenge",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();\r",
+              "pm.collectionVariables.set(\"continuation_token\", jsonData.continuation_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{client_id_new}}",
+              "type": "text",
+              "uuid": "9303521a-a023-4946-a3e6-bf5c59016586"
+            },
+            {
+              "key": "challenge_type",
+              "value": "password oob redirect",
+              "type": "text",
+              "uuid": "17ef9fa6-c845-40bb-944a-1c083190ae9a"
+            },
+            {
+              "key": "capabilities",
+              "value": "registration_required mfa_required",
+              "type": "text",
+              "uuid": "45d789e5-35be-4b11-a446-6ac5d7d38f2b"
+            },
+            {
+              "key": "continuation_token",
+              "value": "{{continuation_token}}",
+              "type": "text",
+              "uuid": "91ad1eb6-34ed-4848-b9a5-e97823c9bcc9"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{tenant_name}}.ciamlogin.com/{{tenant_id}}/oauth2/v2.0/challenge",
+          "protocol": "https",
+          "host": [
+            "{{tenant_name}}",
+            "ciamlogin",
+            "com"
+          ],
+          "path": [
+            "{{tenant_id}}",
+            "oauth2",
+            "v2.0",
+            "challenge"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "SignIn - Token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();\r",
+              "pm.collectionVariables.set(\"continuation_token\", jsonData.continuation_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{client_id_new}}",
+              "type": "text",
+              "uuid": "9303521a-a023-4946-a3e6-bf5c59016586"
+            },
+            {
+              "key": "challenge_type",
+              "value": "password oob redirect",
+              "type": "text",
+              "uuid": "17ef9fa6-c845-40bb-944a-1c083190ae9a"
+            },
+            {
+              "key": "continuation_token",
+              "value": "{{continuation_token}}",
+              "type": "text",
+              "uuid": "91ad1eb6-34ed-4848-b9a5-e97823c9bcc9"
+            },
+            {
+              "key": "grant_type",
+              "value": "password",
+              "type": "text",
+              "uuid": "a8d403fe-7874-4140-ae93-9a53469ece31"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "text",
+              "uuid": "d5ba4a08-5ac5-4703-abf0-5f5eb69c8b87"
+            },
+            {
+              "key": "scope",
+              "value": "openid offline_access",
+              "type": "text",
+              "uuid": "7ae7b3f4-c28b-465d-b79a-af2d61c25587"
+            },
+            {
+              "key": "claims",
+              "value": "{\"access_token\":{\"acrs\":{\"value\":\"c4\",\"essential\":true}}}",
+              "type": "text",
+              "uuid": "7abe4e05-649f-4059-821e-96a39a0bca2d"
+            },
+            {
+              "key": "client_info",
+              "value": "true",
+              "type": "text",
+              "uuid": "2e209585-9578-478c-9ac9-28a6b93733bf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{tenant_name}}.ciamlogin.com/{{tenant_id}}/oauth2/v2.0/token",
+          "protocol": "https",
+          "host": [
+            "{{tenant_name}}",
+            "ciamlogin",
+            "com"
+          ],
+          "path": [
+            "{{tenant_id}}",
+            "oauth2",
+            "v2.0",
+            "token"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "SignIn - Intrsopect",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();\r",
+              "pm.collectionVariables.set(\"continuation_token\", jsonData.continuation_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{client_id_new}}",
+              "type": "text",
+              "uuid": "9303521a-a023-4946-a3e6-bf5c59016586"
+            },
+            {
+              "key": "continuation_token",
+              "value": "{{continuation_token}}",
+              "type": "text",
+              "uuid": "43c8facc-722c-44ae-9fa6-7341891c72d8"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{tenant_name}}.ciamlogin.com/{{tenant_id}}/oauth2/v2.0/introspect",
+          "protocol": "https",
+          "host": [
+            "{{tenant_name}}",
+            "ciamlogin",
+            "com"
+          ],
+          "path": [
+            "{{tenant_id}}",
+            "oauth2",
+            "v2.0",
+            "introspect"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "SignIn - Challenge with MFA",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();\r",
+              "pm.collectionVariables.set(\"continuation_token\", jsonData.continuation_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{client_id_new}}",
+              "type": "text",
+              "uuid": "9303521a-a023-4946-a3e6-bf5c59016586"
+            },
+            {
+              "key": "challenge_type",
+              "value": "password oob redirect",
+              "type": "text",
+              "uuid": "17ef9fa6-c845-40bb-944a-1c083190ae9a"
+            },
+            {
+              "key": "capabilities",
+              "value": "registration_required mfa_required",
+              "type": "text",
+              "uuid": "45d789e5-35be-4b11-a446-6ac5d7d38f2b"
+            },
+            {
+              "key": "continuation_token",
+              "value": "{{continuation_token}}",
+              "type": "text",
+              "uuid": "91ad1eb6-34ed-4848-b9a5-e97823c9bcc9"
+            },
+            {
+              "key": "id",
+              "value": "{{mfa_challenge_id}}",
+              "type": "text",
+              "uuid": "79152e50-7041-4ce3-9aae-edd1af78da5b"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{tenant_name}}.ciamlogin.com/{{tenant_id}}/oauth2/v2.0/challenge",
+          "protocol": "https",
+          "host": [
+            "{{tenant_name}}",
+            "ciamlogin",
+            "com"
+          ],
+          "path": [
+            "{{tenant_id}}",
+            "oauth2",
+            "v2.0",
+            "challenge"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "SignIn - Token with MFA",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var jsonData = pm.response.json();\r",
+              "pm.collectionVariables.set(\"continuation_token\", jsonData.continuation_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "client_id",
+              "value": "{{client_id_new}}",
+              "type": "text",
+              "uuid": "9303521a-a023-4946-a3e6-bf5c59016586"
+            },
+            {
+              "key": "challenge_type",
+              "value": "password oob redirect",
+              "type": "text",
+              "uuid": "17ef9fa6-c845-40bb-944a-1c083190ae9a"
+            },
+            {
+              "key": "continuation_token",
+              "value": "{{continuation_token}}",
+              "type": "text",
+              "uuid": "91ad1eb6-34ed-4848-b9a5-e97823c9bcc9"
+            },
+            {
+              "key": "scope",
+              "value": "openid offline_access",
+              "type": "text",
+              "uuid": "7ae7b3f4-c28b-465d-b79a-af2d61c25587"
+            },
+            {
+              "key": "grant_type",
+              "value": "mfa_oob",
+              "type": "text",
+              "uuid": "d98ead3d-eeb3-49ef-b9be-a67e92df43f8"
+            },
+            {
+              "key": "oob",
+              "value": "064731",
+              "type": "text",
+              "uuid": "aec13f82-28f0-48cc-9bfa-c7e946c2fd90"
+            },
+            {
+              "key": "refresh_token",
+              "value": "1.AbMAM09SI3OPqEKCRhKrTnTTJPMtpUj67jFMqst8xp68IWYAAP-zAA.BQABAwEAAAADAOz_BQD0_0V2b1N0c0FydGlmYWN0cwIAAAAAAKLfyYbT3rwQoKZAgrJ5GAOGZQ5QJKuDRgaqaUT8LPboxAJ8eTAzasquGIRrJFM5lSOCy4NP_7DanuJ1wOPkM3tYQpiVeMmVyMWhvXV-7qDZ8lr-0hOpg9go-vghyI8y9Vl9f1arDjIqgTyM3yWs35k_KdvNyZE1XFsQBaOuDhu2aBpqlwcNIF4bxJe6gimbSuNrhZ58OVZFddSKjGL5Cd3FkeRLSPAhMwTlkKk48MpaFAPBUURzcgWgl0Om6dEs28ly-P30ZJs7ZDNDgZQK1Iop-upm2Zzp7oRHzDPMu7zTIdlkhVMzqskdfy6Ar2TmboyJSSwbqz5RgWz8wKqK3zQ-i7Ua4-JiO6_mrM_0X3FhMO5k7cVbI9z5JSie6jr6gnjiKfzgiOZQz-ESmg3pJfcu6YwdpQW-MWhwzOdOK7JkReOnkIwJomo5yXO5SaC8REW1tJ2J9qsEspufxSLJgeM76LC9cwTttipDDDcftNXKL32oJdU6Ya0vLgLq2MIGJdc881LKb0hjWx7q1fCLvRd0Nv85965SYs8MPRYURW7_Dbc5gRvISrl9FhRwNVkw2Y7l6oageEIjM3gmC76HZs3pNtC-bMNTGbwBOnLpdxyXEutEr6AYmCASlMNOLKt7LvYisFdgUAZR-J-lI0GfFzMG4TQ9Teh3_FtUf37rEMldKlbi32aCcoSaOe-OWVeTWNEwBHlsxyfk5PUZMqf9DWbygWaHHlrMB6bVlzrmv-kM6uCK-tE7ZEiqqryxKua6BYIgCedTU4J4_Q0yZNcBLMPjDmOBDy5HzYfAXha_t2U_rsssV9NgraTIm8gxGoYFdQpq4z06Z7KCeXL9UnKbF7OsaHPQVex5M9BxQkb54H7XUUxjn70yOS4yhJECEOb41HV6L-uahUG8c1Gs-g4p1yKAC-1psS9osIbdH0paa1QI16lMoWPTmASyY21XVEelDricjqVbv-Sc0o0Bc0isyuUgaJjXxWgd1C9RsAVkXNpks8fPISzUt_5E9f4M_CAVRBhT_SesDNxKYgCFVsMUaNPXUT_DaWRShOuw7ZWH42ghUnhrl-aA4ytpJSnMnQ274l80mghcY5ASy9o0lBM1tzsg3YqSdH5g5xaLdoFB0dBf4MEU67E6pqTFPTyihvtvqmgHOMpY7Lo1lUuw0hXd8G87lJzGJg4HhgYgBz8pIHFfiQdNmw6UYxxey-jtqn7rOnqzEVhKTwLmpXoJKZaaz-Hk06JvRs8IlyySsGyAE2b9LTYPnlGoPLTOWiG40Rj5Tcn8C0wgsI_BZJmGoWOnc7o8O3XegiWvyc9e53sVhd22ky7ZKAh9EcMURwZhmhXycBSI",
+              "type": "text",
+              "uuid": "be05b60f-fadc-45f9-9210-114419ea980c",
+              "disabled": true
+            },
+            {
+              "key": "grant_type",
+              "value": "refresh_token",
+              "type": "text",
+              "uuid": "97952fd1-5200-439e-997e-aa7f3b18493f",
+              "disabled": true
+            },
+            {
+              "key": "acr_values",
+              "value": "c1",
+              "type": "text",
+              "uuid": "c5409261-0d05-4ef1-ae0c-d2664e105621",
+              "disabled": true
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{tenant_name}}.ciamlogin.com/{{tenant_id}}/oauth2/v2.0/token",
+          "protocol": "https",
+          "host": [
+            "{{tenant_name}}",
+            "ciamlogin",
+            "com"
+          ],
+          "path": [
+            "{{tenant_id}}",
+            "oauth2",
+            "v2.0",
+            "token"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "tenant_id",
+      "value": ""
+    },
+    {
+      "key": "client_id_new",
+      "value": ""
+    },
+    {
+      "key": "username",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "tenant_name",
+      "value": ""
+    },
+    {
+      "key": "continuation_token",
+      "value": ""
+    },
+    {
+      "key": "mfa_challenge_id",
+      "value": "",
+      "description": "This variable holds the ID of the challenge type (sms/email) from the introspect endpoint which will be used to call the Challenge Endpoint with MFA"
+    }
+  ]
+}
