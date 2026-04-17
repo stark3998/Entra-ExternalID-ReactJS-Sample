@@ -8,11 +8,37 @@ function createGraphAuthHeaders(accessToken) {
   };
 }
 
-async function getGraphSelfServiceProfile(accessToken) {
-  const response = await axios.get(GRAPH_SELF_SERVICE_ENDPOINTS.me, {
+function normalizeGraphFieldList(value) {
+  const items = Array.isArray(value) ? value : String(value || "").split(",");
+  const unique = new Set();
+  items.forEach((item) => {
+    const cleaned = String(item || "").trim();
+    if (cleaned) unique.add(cleaned);
+  });
+  return Array.from(unique);
+}
+
+function getDefaultGraphProfileFields() {
+  return normalizeGraphFieldList(typeof GRAPH_PROFILE_SELECT_FIELDS !== "undefined" ? GRAPH_PROFILE_SELECT_FIELDS : []);
+}
+
+function buildGraphProfileEndpoint(selectFields) {
+  const fields = normalizeGraphFieldList(selectFields);
+  if (fields.length === 0) return GRAPH_SELF_SERVICE_ENDPOINTS.me;
+  return `${GRAPH_SELF_SERVICE_ENDPOINTS.me}?$select=${fields.join(",")}`;
+}
+
+async function getGraphSelfServiceProfile(accessToken, options = {}) {
+  const selectedFields = normalizeGraphFieldList(options.selectFields || getDefaultGraphProfileFields());
+  const endpoint = buildGraphProfileEndpoint(selectedFields);
+  const response = await axios.get(endpoint, {
     headers: createGraphAuthHeaders(accessToken),
   });
-  return response.data;
+  return {
+    data: response.data,
+    selectedFields,
+    endpoint,
+  };
 }
 
 async function getGraphSelfServiceAuthMethods(accessToken) {
@@ -50,3 +76,4 @@ window.getGraphSelfServiceAuthMethods = getGraphSelfServiceAuthMethods;
 window.getGraphSelfServiceTapMethods = getGraphSelfServiceTapMethods;
 window.revokeGraphSelfServiceSessions = revokeGraphSelfServiceSessions;
 window.addGraphSelfServicePhoneMethod = addGraphSelfServicePhoneMethod;
+window.getDefaultGraphProfileFields = getDefaultGraphProfileFields;

@@ -732,6 +732,15 @@
 
     <div id="userProfileDiv" class="is-hidden">
       <h3 class="token-section-title" data-i18n="auth.profile">Entra User Profile</h3>
+      <div class="profile-graph-config">
+        <label for="graphProfileSelectFields" class="content-header">Graph profile fields ($select)</label>
+        <div class="profile-graph-config-row">
+          <input id="graphProfileSelectFields" type="text" class="form-control" placeholder="displayName,givenName,surname,mail,userPrincipalName">
+          <button type="button" class="btn-token-raw" onclick="applyGraphProfileFieldSelection()">Apply fields</button>
+        </div>
+        <p class="field-help">Comma-separated Microsoft Graph <code>/me</code> fields. Click Apply to reload profile data.</p>
+        <div id="graphProfileRequestMeta" class="profile-graph-meta is-hidden"></div>
+      </div>
       <div id="userProfileHighlights" class="profile-highlights"></div>
       <div id="claimProvenanceDiv" class="is-hidden">
         <div class="auth-methods-header">
@@ -745,6 +754,13 @@
           <span class="token-toggle">▼</span>
         </button>
         <pre id="profileClaimsBody" class="token-body is-hidden"></pre>
+      </div>
+      <div class="token-card">
+        <button type="button" class="token-card-header" onclick="toggleTokenBody('graphProfileRawBody')" aria-controls="graphProfileRawBody" aria-expanded="false">
+          <span class="token-card-label">Graph API Response JSON</span>
+          <span class="token-toggle">▼</span>
+        </button>
+        <pre id="graphProfileRawBody" class="token-body is-hidden"></pre>
       </div>
     </div>
 

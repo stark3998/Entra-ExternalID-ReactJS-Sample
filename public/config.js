@@ -25,6 +25,18 @@ const DEFAULTS = {
   demoMode: false,
   enableOperatorMode: false,
   enableBetaGraph: false,
+  graphProfileSelectFields: [
+    "displayName",
+    "givenName",
+    "surname",
+    "mail",
+    "userPrincipalName",
+    "identities",
+    "creationType",
+    "createdDateTime",
+    "externalUserState",
+    "externalUserStateChangeDateTime",
+  ],
   signupRequiredAttributes: [],
   signupAttributeTemplate: "",
 };
@@ -67,6 +79,10 @@ const SIGNUP_CONFIG = {
   attributeTemplate: String(runtimeConfig.SIGNUP_ATTRIBUTE_TEMPLATE || DEFAULTS.signupAttributeTemplate || ""),
 };
 
+const GRAPH_PROFILE_SELECT_FIELDS = parseCsvConfig(
+  runtimeConfig.GRAPH_PROFILE_SELECT_FIELDS || DEFAULTS.graphProfileSelectFields.join(",")
+);
+
 // Endpoints for Native Auth APIs
 const ENV = {
   REDIRECT_URI: msalConfig.auth.redirectUri,
@@ -93,7 +109,7 @@ const loginRequest = {
 };
 
 const GRAPH_SELF_SERVICE_ENDPOINTS = {
-  me: "https://graph.microsoft.com/v1.0/me?$select=displayName,givenName,surname,mail,userPrincipalName,identities,creationType,createdDateTime,externalUserState,externalUserStateChangeDateTime",
+  me: "https://graph.microsoft.com/v1.0/me",
   authMethods: "https://graph.microsoft.com/v1.0/me/authentication/methods",
   tapMethods: "https://graph.microsoft.com/v1.0/me/authentication/temporaryAccessPassMethods",
   revokeSessions: "https://graph.microsoft.com/v1.0/me/revokeSignInSessions",

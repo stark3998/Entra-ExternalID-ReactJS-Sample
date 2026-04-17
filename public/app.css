@@ -1542,6 +1542,38 @@ body::before,
   margin-bottom: 12px;
 }
 
+.profile-graph-config {
+  border: 1px solid var(--line-200);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.profile-graph-config-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.profile-graph-config-row .form-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-graph-meta {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-200);
+  border-radius: 8px;
+  background: #f8fbff;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
 .profile-chip {
   border: 1px solid var(--line-200);
   border-radius: 10px;
@@ -1965,6 +1997,7 @@ body::before,
   border-radius: 12px;
   background: #fff;
   padding: 12px 14px;
+  min-width: 0;
 }
 
 .provenance-claim {
@@ -1978,6 +2011,9 @@ body::before,
   margin-top: 6px;
   color: var(--ink-700);
   font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .provenance-conflict {

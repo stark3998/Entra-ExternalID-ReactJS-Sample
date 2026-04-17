@@ -81,6 +81,7 @@ function getEffectiveConfig() {
   const resetPasswordChallengeType = process.env.NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE || 'oob redirect';
   const signupRequiredAttributes = process.env.SIGNUP_REQUIRED_ATTRIBUTES || '';
   const signupAttributeTemplate = process.env.SIGNUP_ATTRIBUTE_TEMPLATE || '';
+  const graphProfileSelectFields = process.env.GRAPH_PROFILE_SELECT_FIELDS || '';
 
   return {
     runtimeConfig: {
@@ -102,6 +103,7 @@ function getEffectiveConfig() {
       NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE: resetPasswordChallengeType,
       SIGNUP_REQUIRED_ATTRIBUTES: signupRequiredAttributes,
       SIGNUP_ATTRIBUTE_TEMPLATE: signupAttributeTemplate,
+      GRAPH_PROFILE_SELECT_FIELDS: graphProfileSelectFields,
     },
     settingsView: {
       APP_PORT: String(port),
@@ -128,6 +130,7 @@ function getEffectiveConfig() {
       NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE: resetPasswordChallengeType,
       SIGNUP_REQUIRED_ATTRIBUTES: signupRequiredAttributes,
       SIGNUP_ATTRIBUTE_TEMPLATE: signupAttributeTemplate,
+      GRAPH_PROFILE_SELECT_FIELDS: graphProfileSelectFields,
       LOGIN_SCOPES: loginScopes.join(','),
       ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '',
     },

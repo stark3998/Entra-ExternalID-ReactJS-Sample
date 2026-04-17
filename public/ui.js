@@ -28,6 +28,7 @@ const SESSION_KEYS = {
     REFRESH_TOKEN: "nativeAuth_refresh_token",
     INTERACTION_TYPE: "nativeAuth_interaction_type",
     DEMO_MODE: "nativeAuth_demo_mode",
+    GRAPH_PROFILE_SELECT_FIELDS: "nativeAuth_graph_profile_select_fields",
 };
 
 const SESSION_STORAGE = window.localStorage;
@@ -904,10 +905,47 @@ function getPreferredClaim(claims, keys) {
     return "";
 }
 
+function parseFieldList(value) {
+    const parts = Array.isArray(value) ? value : String(value || "").split(",");
+    const unique = new Set();
+    parts.forEach((part) => {
+        const cleaned = String(part || "").trim();
+        if (cleaned) unique.add(cleaned);
+    });
+    return Array.from(unique);
+}
+
+function getGraphProfileSelectFields() {
+    const stored = getSessionItem(SESSION_KEYS.GRAPH_PROFILE_SELECT_FIELDS);
+    if (stored) return parseFieldList(stored);
+    if (typeof window.getDefaultGraphProfileFields === "function") {
+        return parseFieldList(window.getDefaultGraphProfileFields());
+    }
+    return [];
+}
+
+function setGraphProfileSelectFields(value) {
+    const fields = parseFieldList(value);
+    if (fields.length === 0) {
+        removeSessionItem(SESSION_KEYS.GRAPH_PROFILE_SELECT_FIELDS);
+    } else {
+        setSessionItem(SESSION_KEYS.GRAPH_PROFILE_SELECT_FIELDS, fields.join(","));
+    }
+    return fields;
+}
+
+function syncGraphProfileFieldInput() {
+    const input = document.getElementById("graphProfileSelectFields");
+    if (!input || document.activeElement === input) return;
+    input.value = getGraphProfileSelectFields().join(", ");
+}
+
 function renderComprehensiveUserProfile(context) {
     const profileDiv = document.getElementById("userProfileDiv");
     const highlights = document.getElementById("userProfileHighlights");
     const claimsBody = document.getElementById("profileClaimsBody");
+    const graphRawBody = document.getElementById("graphProfileRawBody");
+    const graphRequestMeta = document.getElementById("graphProfileRequestMeta");
     if (!profileDiv || !highlights || !claimsBody) return;
 
     const accessToken = context && context.accessToken;
@@ -935,6 +973,7 @@ function renderComprehensiveUserProfile(context) {
     const locale = getLocaleFromClaims(mergedClaims) || (typeof window.getLocale === "function" ? window.getLocale() : "en");
 
     const graphProfile = (context && context.graphProfile) || {};
+    const graphProfileMeta = (context && context.graphProfileMeta) || {};
     const tapMethods = (context && context.tapMethods) || [];
 
     const userSummary = [
@@ -975,6 +1014,26 @@ function renderComprehensiveUserProfile(context) {
         null,
         2
     );
+
+    if (graphRawBody) {
+        graphRawBody.textContent = JSON.stringify(graphProfile || {}, null, 2);
+    }
+    if (graphRequestMeta) {
+        const endpoint = graphProfileMeta.endpoint || "";
+        const selected = parseFieldList(graphProfileMeta.selectedFields || getGraphProfileSelectFields());
+        if (!endpoint && selected.length === 0) {
+            graphRequestMeta.classList.add("is-hidden");
+            graphRequestMeta.textContent = "";
+        } else {
+            const metaLines = [];
+            if (selected.length > 0) metaLines.push(`$select: ${selected.join(", ")}`);
+            if (endpoint) metaLines.push(`Endpoint: ${endpoint}`);
+            graphRequestMeta.textContent = metaLines.join(" | ");
+            graphRequestMeta.classList.remove("is-hidden");
+        }
+    }
+
+    syncGraphProfileFieldInput();
 
     renderClaimProvenance(accountClaims, accessClaims, idClaims);
 
@@ -1283,8 +1342,9 @@ async function enrichProfileWithGraphSelfService(accessToken, accountClaims) {
     }
 
     try {
+        const selectedFields = getGraphProfileSelectFields();
         const [graphProfile, tapResponse] = await Promise.all([
-            window.getGraphSelfServiceProfile(accessToken),
+            window.getGraphSelfServiceProfile(accessToken, { selectFields: selectedFields }),
             window.getGraphSelfServiceTapMethods(accessToken),
         ]);
 
@@ -1292,13 +1352,36 @@ async function enrichProfileWithGraphSelfService(accessToken, accountClaims) {
             accessToken,
             idToken: getSessionTokens().id_token,
             accountClaims: accountClaims || {},
-            graphProfile,
+            graphProfile: (graphProfile && graphProfile.data) || {},
+            graphProfileMeta: {
+                selectedFields: (graphProfile && graphProfile.selectedFields) || selectedFields,
+                endpoint: graphProfile && graphProfile.endpoint,
+            },
             tapMethods: (tapResponse && tapResponse.value) || [],
         });
     } catch (err) {
         pushErrorHistory(err.response?.data || err);
     }
 }
+
+function applyGraphProfileFieldSelection() {
+    const input = document.getElementById("graphProfileSelectFields");
+    if (!input) return;
+
+    const fields = setGraphProfileSelectFields(input.value);
+    input.value = fields.join(", ");
+
+    const tokens = getSessionTokens();
+    if (!tokens.access_token) {
+        setLoginNotice("info", tr("msg.noSession"));
+        return;
+    }
+
+    const claims = tokens.id_token ? parseJwt(tokens.id_token) : {};
+    enrichProfileWithGraphSelfService(tokens.access_token, claims);
+}
+
+window.applyGraphProfileFieldSelection = applyGraphProfileFieldSelection;
 
 // ---------------------------------------------------------------------------
 // Token display helpers
