@@ -212,25 +212,176 @@ The UI supports runtime theme presets for demos.
 - Supported values: `azure-portal`, `enterprise-blue`, `fintech-slate`
 - Users can switch theme live from the header dropdown; the choice is persisted in browser storage
 
-## Native Auth Flow Summary
+## Native Auth Flow Deep Dive
 
-1. `/oauth2/v2.0/initiate`
-1. `/oauth2/v2.0/challenge`
-1. `/oauth2/v2.0/token` (password grant)
-1. If required, MFA branch:
+This project implements Microsoft Entra External ID Native Authentication using
+raw HTTP endpoints (through the local proxy), aligned with the official API
+reference:
 
-- `/oauth2/v2.0/introspect`
-- `/oauth2/v2.0/challenge` (method selection)
-- `/oauth2/v2.0/token` (mfa_oob grant)
+- [Native authentication API reference](https://learn.microsoft.com/en-us/entra/identity-platform/reference-native-authentication-api?tabs=emailOtp)
 
-1. If registration is required, registration branch:
+Important platform notes from the reference:
 
-- `/register/v1.0/introspect`
-- `/register/v1.0/challenge`
-- `/register/v1.0/continue`
-- `/oauth2/v2.0/token` (continuation token grant)
+- Native Auth APIs are designed for external tenants.
+- Native Auth endpoints do not support browser CORS directly.
+- For this reason, this repo uses [cors.js](cors.js) as a local forwarding proxy.
+- All Native Auth requests are sent as `application/x-www-form-urlencoded`.
 
-All Native Auth requests use `application/x-www-form-urlencoded`.
+### API-by-API Cheat Sheet
+
+| Endpoint | Required params (common) | Common success fields | Common suberrors / notes |
+| --- | --- | --- | --- |
+| `/oauth2/v2.0/initiate` | `client_id`, `username`, `challenge_type` (include `redirect`) | `continuation_token` or `challenge_type=redirect` | `nativeauthapi_disabled` (via `invalid_client`), `user_not_found` |
+| `/oauth2/v2.0/challenge` | `client_id`, `continuation_token`, `challenge_type` (and optional `id` for MFA) | `challenge_type` (`password` or `oob`), `continuation_token`, `challenge_channel`, `challenge_target_label`, `code_length` | `unsupported_challenge_type` if `redirect` is missing |
+| `/oauth2/v2.0/token` | `client_id`, `continuation_token`, `grant_type`, `scope`, and credential (`password` or `oob`) | `access_token`, `id_token`, `refresh_token`, `expires_in`, `scope` | `mfa_required`, `registration_required`, `invalid_oob_value` |
+| `/oauth2/v2.0/introspect` | `client_id`, `continuation_token` | `continuation_token`, `methods[]` (`id`, `challenge_type`, `challenge_channel`, `login_hint`) | Use before MFA challenge when token flow indicates `mfa_required` |
+| `/register/v1.0/introspect` | `client_id`, `continuation_token` | `continuation_token`, `methods[]` (enrollable factors) | Start registration flow when token flow indicates `registration_required` |
+| `/register/v1.0/challenge` | `client_id`, `continuation_token`, `challenge_type`, `challenge_target` (and optional `challenge_channel`) | `continuation_token`, `challenge_type` (`oob` or `preverified`) | `provider_blocked_by_admin`, `provider_blocked_by_rep` (phone/SMS risk controls) |
+| `/register/v1.0/continue` | `client_id`, `continuation_token`, `grant_type` (`oob` or `continuation_token`), and `oob` when required | `continuation_token` | `invalid_oob_value` |
+
+Notes for operators:
+
+- Always propagate the latest `continuation_token` to the next call.
+- Capture `trace_id` and `correlation_id` on failures for diagnostics.
+- Treat `challenge_type=redirect` as a required fallback path, not a hard error.
+
+### Core Concepts
+
+1. Continuation token
+1. Challenge types
+1. Grant types
+1. Redirect fallback
+
+Continuation token:
+
+- Most endpoints return `continuation_token`.
+- You must pass it to the next endpoint in the same flow.
+- Tokens are short-lived and endpoint-sequence specific.
+
+Challenge types used in practice:
+
+- `password`
+- `oob` (one-time passcode)
+- `redirect` (required fallback path)
+
+Grant types used by the token/continue endpoints:
+
+- `password`
+- `oob`
+- `mfa_oob`
+- `attributes`
+- `continuation_token`
+
+Redirect fallback behavior:
+
+- If app capabilities or challenge support are insufficient, the API can return
+  `challenge_type=redirect`.
+- Treat this as a successful control response that requires switching to
+  web-based auth.
+
+### Sign-In Flow (Implemented in This Repo)
+
+This is the primary native flow in this demo.
+
+Step 1: Initiate
+
+- Endpoint: `/oauth2/v2.0/initiate`
+- Purpose: start sign-in and get `continuation_token`.
+- Request includes `client_id`, `username`, and `challenge_type` list.
+- The challenge list should include `redirect` to allow compliant fallback.
+
+Step 2: Challenge selection
+
+- Endpoint: `/oauth2/v2.0/challenge`
+- Purpose: let Entra select the required method for this user/session.
+- Typical outcomes:
+  - `challenge_type=password`
+  - `challenge_type=oob` plus metadata (`challenge_channel`, masked target,
+    `code_length`)
+  - `challenge_type=redirect`
+
+Step 3: Token request
+
+- Endpoint: `/oauth2/v2.0/token`
+- Purpose: verify supplied credential and issue tokens.
+- Common request patterns:
+  - Password first factor: `grant_type=password` + `password`
+  - Email OTP first factor: `grant_type=oob` + `oob`
+  - MFA second factor: `grant_type=mfa_oob` + `oob`
+- Success can include:
+  - `access_token`
+  - `id_token` (requires `openid` scope)
+  - `refresh_token` (requires `offline_access` scope)
+
+### MFA Extension Branch
+
+When `/oauth2/v2.0/token` returns `invalid_grant` with `suberror=mfa_required`:
+
+1. Call `/oauth2/v2.0/introspect` with the continuation token.
+2. Present returned strong-auth methods to the user.
+3. Call `/oauth2/v2.0/challenge` with selected method `id`.
+4. Collect OTP and call `/oauth2/v2.0/token` with `grant_type=mfa_oob`.
+
+Repo mapping:
+
+- Flow orchestration: [public/nativeAuth.js](public/nativeAuth.js)
+- Method rendering and dialogs: [public/ui.js](public/ui.js)
+
+### Strong Method Registration Branch
+
+When `/oauth2/v2.0/token` indicates `suberror=registration_required`:
+
+1. `/register/v1.0/introspect` to get enrollable methods.
+2. `/register/v1.0/challenge` to send enrollment challenge.
+3. `/register/v1.0/continue` to submit OTP or preverified continuation.
+4. `/oauth2/v2.0/token` with `grant_type=continuation_token` to complete auth.
+
+Repo mapping:
+
+- Registration calls: [public/config.js](public/config.js)
+- Registration flow handling: [public/nativeAuth.js](public/nativeAuth.js)
+
+### Capabilities and Fallback
+
+The reference supports optional capability signaling in initiation/challenge
+requests:
+
+- `mfa_required`
+- `registration_required`
+
+If a required capability is not advertised by the client, Entra can return
+redirect with reason information and require browser-based flow.
+
+### Error Contract and Troubleshooting
+
+Native Auth error responses commonly include:
+
+- `error`
+- `error_description`
+- `error_codes`
+- `timestamp`
+- `trace_id`
+- `correlation_id`
+- `suberror` (scenario-specific)
+
+Operational guidance:
+
+1. Log and preserve `trace_id` and `correlation_id` for support diagnostics.
+2. Handle `expired_token` by restarting the current flow.
+3. Handle `invalid_oob_value` with bounded retry UX.
+4. Handle password policy suberrors such as `password_too_weak` explicitly.
+5. Handle `challenge_type=redirect` as a control path, not a transport failure.
+
+### Sign-Up and SSPR in the Reference
+
+The Microsoft reference also documents:
+
+- Sign-up endpoints under `/signup/v1.0/*`
+- SSPR endpoints under `/resetpassword/v1.0/*`
+
+This repo currently focuses on native sign-in, MFA, and strong method
+registration. If you extend this sample to sign-up or SSPR, follow the same
+continuation-token and redirect-fallback patterns documented in the reference.
 
 ## Repository Deep Dive
 
