@@ -53,12 +53,13 @@
     const THEME_STORAGE_KEY = "app_theme";
     const DEFAULT_THEME = "azure-portal";
     const SUPPORTED_THEMES = ["azure-portal", "enterprise-blue", "fintech-slate"];
-    const SECTION_KEYS = ["app", "entra", "proxy", "ui"];
+    const SECTION_KEYS = ["app", "entra", "proxy", "graph", "ui"];
     const SECTION_VARIABLES = {
       app: ["APP_PORT", "APP_ORIGIN", "REDIRECT_URI"],
-      entra: ["CLIENT_ID", "TENANT_ID", "TENANT_SUBDOMAIN", "ENTRA_AUTHORITY_HOST", "AUTHORITY", "LOGIN_SCOPES"],
+      entra: ["CLIENT_ID", "TENANT_ID", "TENANT_SUBDOMAIN", "ENTRA_AUTHORITY_HOST", "AUTHORITY", "LOGIN_SCOPES", "NATIVE_AUTH_SCOPES", "NATIVE_AUTH_CAPABILITIES", "NATIVE_AUTH_SIGNIN_CHALLENGE_TYPE", "NATIVE_AUTH_SIGNUP_CHALLENGE_TYPE", "NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE", "SIGNUP_REQUIRED_ATTRIBUTES", "SIGNUP_ATTRIBUTE_TEMPLATE"],
       proxy: ["LOCAL_API_PATH", "CORS_PORT", "PROXY_TARGET", "PUBLIC_BASE_API_URL", "ALLOWED_ORIGINS"],
-      ui: ["LOCALE", "THEME"],
+      graph: ["ENABLE_OPERATOR_MODE", "ENABLE_BETA_GRAPH"],
+      ui: ["LOCALE", "THEME", "DEMO_MODE"],
     };
 
     function applyTheme(theme) {

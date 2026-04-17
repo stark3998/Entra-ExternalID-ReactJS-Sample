@@ -34,6 +34,9 @@ function initThemeSwitcher() {
 // Restore a previous native auth session on page load
 document.addEventListener("DOMContentLoaded", () => {
   initThemeSwitcher();
+  if (typeof window.setDemoMode === "function") {
+    window.setDemoMode(window.isDemoModeEnabled(), { silent: true });
+  }
   restoreSession();
 });
 
@@ -43,25 +46,28 @@ async function logout() {
     const tokens = getSessionTokens();
     if (tokens.access_token) {
       try {
-        await axios.post(
-          "https://graph.microsoft.com/v1.0/me/revokeSignInSessions",
-          {},
-          {
-            headers: {
-              Authorization: `Bearer ${tokens.access_token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        await window.revokeGraphSelfServiceSessions(tokens.access_token);
         console.log("Sign-in sessions revoked successfully.");
       } catch (err) {
         console.warn("Failed to revoke sign-in sessions:", err);
+        if (typeof window.showErrorDiagnostics === "function") {
+          window.showErrorDiagnostics(err.response?.data || err);
+        }
       }
     }
     clearSessionTokens();
     renderUnauthenticatedUI();
     interactionType = "";
     return;
+  }
+  if (typeof window.clearMsalSilentRefreshTimer === "function") {
+    window.clearMsalSilentRefreshTimer();
+  }
+  if (typeof window.clearRefreshScheduleIndicator === "function") {
+    window.clearRefreshScheduleIndicator();
+  }
+  if (typeof window.setSessionInteractionType === "function") {
+    window.setSessionInteractionType("");
   }
   const logoutRequest = {
     account: msalInstance.getAllAccounts()[0],

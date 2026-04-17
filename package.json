@@ -4,7 +4,8 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run test:smoke",
+    "test:smoke": "node --test tests/phase1.smoke.test.js",
     "ports:kill": "node scripts/kill-ports.js",
     "stop": "node scripts/stop-stack.js",
     "dev": "node scripts/start-stack.js",

@@ -8,7 +8,7 @@ This project showcases three sign-in approaches in a single UI:
 - MSAL Popup (hosted sign-in popup)
 - MSAL Redirect (full-page hosted sign-in)
 
-It also demonstrates MFA challenges and MFA method registration where supported by tenant policy.
+It also demonstrates self-service sign-up, self-service password reset, MFA challenges, MFA method registration, demo-mode token visibility, and operator-grade diagnostics where supported by tenant policy.
 
 ## Index
 
@@ -22,6 +22,9 @@ It also demonstrates MFA challenges and MFA method registration where supported 
 - [Quick Start](#quick-start)
 - [Run Both Services Together](#run-both-services-together)
 - [Configuration](#configuration)
+- [Phase 1 Operator Guide](#phase-1-operator-guide)
+- [Smoke Tests](#smoke-tests)
+- [Graph Client Split](#graph-client-split)
 - [Startup Script Deep Dive](#startup-script-deep-dive)
 - [Repository Deep Dive](#repository-deep-dive)
 - [Session Behavior](#session-behavior)
@@ -196,9 +199,8 @@ The Microsoft reference also documents:
 - Sign-up endpoints under `/signup/v1.0/*`
 - SSPR endpoints under `/resetpassword/v1.0/*`
 
-This repo currently focuses on native sign-in, MFA, and strong method
-registration. If you extend this sample to sign-up or SSPR, follow the same
-continuation-token and redirect-fallback patterns documented in the reference.
+This repo now includes baseline sign-up and SSPR flows using the documented
+continuation-token and redirect-fallback patterns.
 
 ## Postman Collection Deep Dive
 
@@ -315,12 +317,14 @@ Operational implication:
 - Side-by-side comparison of native and hosted sign-in patterns
 - Token inspection (access token, ID token, refresh token)
 - Microsoft Graph authentication method listing and phone method registration
+- Operator diagnostics with masked request/response payloads and trace IDs
+- Tenant-specific sign-up attribute enforcement through runtime config
 
 ## What This Demo Is Not For
 
 - Production-ready identity UX out of the box
-- Full account lifecycle features (self-service sign-up, password reset, profile editing)
 - Backend API authorization patterns
+- Privileged Graph beta operations directly from an end-user delegated token
 
 ## Architecture Overview
 
@@ -360,6 +364,7 @@ Recommended delegated scopes for this sample:
 - `openid`
 - `profile`
 - `email`
+- `User.Read`
 - `UserAuthenticationMethod.Read`
 - `UserAuthMethod-Phone.ReadWrite`
 
@@ -370,6 +375,104 @@ npm install
 npm run start:env
 npm run cors:env
 ```
+
+## Phase 1 Operator Guide
+
+### Sign-up flow
+
+The sign-up path now uses the Microsoft Native Auth sign-up endpoints:
+
+1. `/signup/v1.0/start`
+2. `/signup/v1.0/challenge`
+3. `/signup/v1.0/continue`
+4. `/oauth2/v2.0/token` with `grant_type=continuation_token`
+
+Operational notes:
+
+- The app always captures the latest `continuation_token` and carries it forward.
+- If the tenant demands a browser-hosted fallback, the app surfaces a diagnostics panel instead of silently failing.
+- Tenant-specific required attributes can be enforced with `SIGNUP_REQUIRED_ATTRIBUTES`.
+- A prefilled attribute JSON template can be supplied with `SIGNUP_ATTRIBUTE_TEMPLATE`.
+
+Example:
+
+```bash
+SIGNUP_REQUIRED_ATTRIBUTES=postalCode,city
+SIGNUP_ATTRIBUTE_TEMPLATE={"postalCode":"98052","city":"Redmond"}
+```
+
+### SSPR flow
+
+The reset-password path now uses:
+
+1. `/resetpassword/v1.0/start`
+2. `/resetpassword/v1.0/challenge`
+3. `/resetpassword/v1.0/continue`
+4. `/resetpassword/v1.0/submit`
+5. `/resetpassword/v1.0/poll_completion`
+6. `/oauth2/v2.0/token` for post-reset automatic sign-in
+
+Operational notes:
+
+- The app polls until the reset returns `status=succeeded` or a terminal failure.
+- Password-policy failures are preserved in the diagnostics payload.
+- Reset flow errors should be handled using `trace_id` and `correlation_id` from the diagnostics panel.
+
+### Demo mode and diagnostics
+
+- Raw token values are hidden by default.
+- Demo mode stores its state in `sessionStorage` and only affects the current browser session.
+- The diagnostics dialog captures:
+  - endpoint
+  - flow step
+  - status and suberror
+  - trace and correlation IDs
+  - masked request and response payloads
+
+### Real tenant validation
+
+This repo currently ships without a local `.env`, so the sample cannot exercise a real tenant until you provide actual values for `CLIENT_ID`, `TENANT_ID`, and `TENANT_SUBDOMAIN`.
+
+To validate against a tenant:
+
+1. Create a `.env` from [.env.example](.env.example).
+2. Set the Entra tenant and app registration values.
+3. Add any tenant-required sign-up attributes.
+4. Run `npm run start:env` and `npm run cors:env`.
+5. Exercise sign-up and reset-password from the browser UI.
+
+## Smoke Tests
+
+Phase 1 now includes a lightweight smoke suite in [tests/phase1.smoke.test.js](tests/phase1.smoke.test.js).
+
+Run it with:
+
+```bash
+npm test
+```
+
+The smoke suite validates:
+
+- Phase 1 endpoint configuration
+- runtime-enforced sign-up attribute requirements
+- sign-up request shaping
+- reset-password submit and poll behavior
+- demo mode session behavior
+
+This is a contract-level smoke suite, not a full browser end-to-end harness. It is designed to catch regressions in the implemented Phase 1 flow helpers without adding new test dependencies.
+
+## Graph Client Split
+
+Phase 2 has started by separating Graph code into two lanes:
+
+- Self-service delegated client: [public/graphSelfServiceClient.js](public/graphSelfServiceClient.js)
+- Operator beta client: [public/graphOperatorClient.js](public/graphOperatorClient.js)
+
+Rules:
+
+- End-user profile, auth-method inventory, TAP reads, phone-method registration, and session revocation stay in the self-service client.
+- Beta reporting and operator lookups stay in the operator client and are guarded by `ENABLE_OPERATOR_MODE` and `ENABLE_BETA_GRAPH`.
+- UI code should call the client functions instead of raw Graph URLs so the separation remains enforceable as more operator features are added.
 
 ## Run Both Services Together
 

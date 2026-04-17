@@ -27,12 +27,794 @@ const SESSION_KEYS = {
     ID_TOKEN: "nativeAuth_id_token",
     REFRESH_TOKEN: "nativeAuth_refresh_token",
     INTERACTION_TYPE: "nativeAuth_interaction_type",
+    DEMO_MODE: "nativeAuth_demo_mode",
+};
+
+const ERROR_HISTORY = [];
+let lastDiagnosticPayload = null;
+const TOKEN_TIMER_IDS = {};
+let latestOperatorRegistrationDetails = null;
+const OPERATOR_CACHE = new Map();
+const OPERATOR_CACHE_TTL_MS = 5 * 60 * 1000;
+const OPERATOR_SEARCH_HISTORY_KEY = "operator_search_history";
+const TOKEN_GUIDANCE_STATE = {
+    accessTokenLifetime: false,
+    idTokenLifetime: false,
+};
+const REFRESH_SCHEDULE_STATE = {
+    mode: "",
+    strategy: "",
+    lastRefreshAt: null,
+    nextRefreshAt: null,
 };
 
 function tr(key, params) {
     if (typeof window.t === "function") return window.t(key, params);
     return key;
 }
+
+function getDemoModeFallback() {
+    return typeof DEMO_MODE_DEFAULT !== "undefined" ? DEMO_MODE_DEFAULT : false;
+}
+
+function isDemoModeEnabled() {
+    const stored = sessionStorage.getItem(SESSION_KEYS.DEMO_MODE);
+    if (stored === null) return getDemoModeFallback();
+    return stored === "true";
+}
+
+function setDemoMode(value, options = {}) {
+    const enabled = Boolean(value);
+    sessionStorage.setItem(SESSION_KEYS.DEMO_MODE, enabled ? "true" : "false");
+
+    const toggle = document.getElementById("demoModeToggle");
+    if (toggle) {
+        toggle.checked = enabled;
+    }
+
+    applyDemoModeState();
+
+    if (!options.silent) {
+        setLoginNotice("info", enabled ? tr("msg.demoModeEnabled") : tr("msg.demoModeDisabled"));
+    }
+}
+
+function applyDemoModeState() {
+    const enabled = isDemoModeEnabled();
+    const rawToggles = document.querySelectorAll(".token-raw-toggle");
+    rawToggles.forEach((element) => {
+        element.style.display = enabled ? "block" : "none";
+    });
+
+    if (!enabled) {
+        document.querySelectorAll(".token-raw").forEach((element) => {
+            element.style.display = "none";
+        });
+    }
+
+    const warning = document.getElementById("demoModeWarning");
+    if (warning) {
+        warning.style.display = enabled ? "block" : "none";
+    }
+}
+
+function setLoginNotice(type, message) {
+    const notice = document.getElementById("authNotice");
+    if (!notice) return;
+
+    if (!message) {
+        notice.textContent = "";
+        notice.className = "auth-notice is-hidden";
+        return;
+    }
+
+    notice.textContent = message;
+    notice.className = `auth-notice auth-notice-${type || "info"}`;
+}
+
+function clearLoginNotice() {
+    setLoginNotice("", "");
+}
+
+function setSessionInteractionType(type) {
+    interactionType = type || "";
+    if (!type) {
+        sessionStorage.removeItem(SESSION_KEYS.INTERACTION_TYPE);
+        return;
+    }
+    sessionStorage.setItem(SESSION_KEYS.INTERACTION_TYPE, type);
+}
+
+function getSessionInteractionType() {
+    return interactionType || sessionStorage.getItem(SESSION_KEYS.INTERACTION_TYPE) || (hasActiveSession() ? "native" : "");
+}
+
+window.setSessionInteractionType = setSessionInteractionType;
+window.getSessionInteractionType = getSessionInteractionType;
+
+function getOperatorSearchHistory() {
+    try {
+        return JSON.parse(localStorage.getItem(OPERATOR_SEARCH_HISTORY_KEY) || "[]");
+    } catch (_err) {
+        return [];
+    }
+}
+
+function saveOperatorSearchHistory(history) {
+    localStorage.setItem(OPERATOR_SEARCH_HISTORY_KEY, JSON.stringify(history.slice(0, 6)));
+}
+
+function addOperatorSearchHistory(identifier) {
+    const value = String(identifier || "").trim();
+    if (!value) return;
+    const current = getOperatorSearchHistory().filter((item) => item !== value);
+    current.unshift(value);
+    saveOperatorSearchHistory(current);
+    renderOperatorSearchHistory();
+}
+
+function renderOperatorSearchHistory() {
+    const container = document.getElementById("operatorSearchHistory");
+    if (!container) return;
+    const history = getOperatorSearchHistory();
+    if (history.length === 0) {
+        container.innerHTML = "";
+        container.style.display = "none";
+        return;
+    }
+
+    container.innerHTML = [
+        `<span class="field-help">${escapeHtml(tr("operator.historyTitle"))}</span>`,
+        ...history.map((item) => `<button type="button" class="operator-history-chip" onclick="openOperatorUserDrawerFromHistory('${escapeHtml(item).replace(/'/g, "&#39;")}')">${escapeHtml(item)}</button>`),
+    ].join("");
+    container.style.display = "flex";
+}
+
+function getOperatorCacheEntry(identifier) {
+    const entry = OPERATOR_CACHE.get(identifier);
+    if (!entry) return null;
+    if ((Date.now() - entry.cachedAt) > OPERATOR_CACHE_TTL_MS) {
+        OPERATOR_CACHE.delete(identifier);
+        return null;
+    }
+    return entry.data;
+}
+
+function setOperatorCacheEntry(identifier, data) {
+    OPERATOR_CACHE.set(identifier, { cachedAt: Date.now(), data });
+}
+
+function renderTokenGuidance(message, actions = []) {
+    const banner = document.getElementById("tokenGuidanceBanner");
+    if (!banner) return;
+    if (!message) {
+        banner.innerHTML = "";
+        banner.className = "token-guidance-banner is-hidden";
+        return;
+    }
+
+    const actionsMarkup = actions.length > 0
+        ? `<div class="token-guidance-actions">${actions.map((action) => `<button type="button" class="btn-token-guidance" onclick="${action.handler}()">${escapeHtml(action.label)}</button>`).join("")}</div>`
+        : "";
+
+    banner.innerHTML = `<div class="token-guidance-copy">${escapeHtml(message)}</div>${actionsMarkup}`;
+    banner.className = "token-guidance-banner";
+}
+
+function refreshTokenGuidance() {
+    const hasCriticalToken = Object.values(TOKEN_GUIDANCE_STATE).some(Boolean);
+    if (!hasCriticalToken) {
+        renderTokenGuidance("");
+        return;
+    }
+
+    const interaction = getSessionInteractionType();
+    if (interaction === "native") {
+        const hasRefreshToken = Boolean(getSessionTokens().refresh_token);
+        renderTokenGuidance(
+            hasRefreshToken ? tr("auth.tokenCriticalWithRefresh") : tr("auth.tokenCriticalNoRefresh"),
+            [
+                hasRefreshToken ? { label: tr("auth.refreshSession"), handler: "refreshCurrentSession" } : null,
+                { label: tr("auth.signInAgain"), handler: "reauthenticateCurrentSession" },
+            ].filter(Boolean)
+        );
+        return;
+    }
+
+    if (typeof window.hasMsalAccount === "function" && window.hasMsalAccount()) {
+        const state = typeof window.getMsalSilentRefreshState === "function"
+            ? window.getMsalSilentRefreshState()
+            : { status: "idle" };
+        let message = tr("auth.tokenCriticalMsal");
+        if (state.status === "refreshing") {
+            message = tr("auth.tokenCriticalMsalRefreshing");
+        } else if (state.status === "failed") {
+            message = tr("auth.tokenCriticalMsalFailed");
+        }
+
+        renderTokenGuidance(message, [
+            { label: tr("auth.refreshSession"), handler: "refreshCurrentSession" },
+            { label: tr("auth.signInAgain"), handler: "reauthenticateCurrentSession" },
+        ]);
+        return;
+    }
+
+    renderTokenGuidance(tr("auth.tokenCriticalNoRefresh"), [
+        { label: tr("auth.signInAgain"), handler: "reauthenticateCurrentSession" },
+    ]);
+}
+
+window.refreshTokenGuidance = refreshTokenGuidance;
+
+function formatRefreshTimestamp(value) {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString();
+}
+
+function renderRefreshScheduleIndicator() {
+    const container = document.getElementById("refreshScheduleIndicator");
+    if (!container) return;
+
+    if (!REFRESH_SCHEDULE_STATE.mode) {
+        container.innerHTML = "";
+        container.className = "refresh-schedule-indicator is-hidden";
+        return;
+    }
+
+    const modeText = REFRESH_SCHEDULE_STATE.mode === "msal"
+        ? tr("auth.refreshModeMsal")
+        : tr("auth.refreshModeNative");
+
+    const lastRefreshText = REFRESH_SCHEDULE_STATE.lastRefreshAt
+        ? formatRefreshTimestamp(REFRESH_SCHEDULE_STATE.lastRefreshAt)
+        : tr("auth.refreshNever");
+
+    let nextRefreshText = tr("auth.refreshNotScheduled");
+    if (REFRESH_SCHEDULE_STATE.mode === "native") {
+        nextRefreshText = tr("auth.refreshOnDemand");
+    } else if (REFRESH_SCHEDULE_STATE.nextRefreshAt) {
+        const nextDate = new Date(REFRESH_SCHEDULE_STATE.nextRefreshAt);
+        const remaining = nextDate.getTime() - Date.now();
+        if (remaining <= 0) {
+            nextRefreshText = tr("auth.refreshDueNow");
+        } else {
+            nextRefreshText = `${formatRefreshTimestamp(nextDate)} (${formatDuration(remaining)})`;
+        }
+    }
+
+    container.innerHTML = [
+        `<div class="refresh-schedule-mode">${escapeHtml(modeText)}</div>`,
+        `<div class="refresh-schedule-row"><span class="refresh-schedule-label">${escapeHtml(tr("auth.lastRefresh"))}:</span>${escapeHtml(lastRefreshText)}</div>`,
+        `<div class="refresh-schedule-row"><span class="refresh-schedule-label">${escapeHtml(tr("auth.nextRefresh"))}:</span>${escapeHtml(nextRefreshText)}</div>`,
+    ].join("");
+    container.className = "refresh-schedule-indicator";
+}
+
+function setRefreshScheduleIndicator(updates = {}) {
+    ["mode", "strategy", "lastRefreshAt", "nextRefreshAt"].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(updates, key)) {
+            REFRESH_SCHEDULE_STATE[key] = updates[key];
+        }
+    });
+    renderRefreshScheduleIndicator();
+}
+
+function clearRefreshScheduleIndicator() {
+    REFRESH_SCHEDULE_STATE.mode = "";
+    REFRESH_SCHEDULE_STATE.strategy = "";
+    REFRESH_SCHEDULE_STATE.lastRefreshAt = null;
+    REFRESH_SCHEDULE_STATE.nextRefreshAt = null;
+    renderRefreshScheduleIndicator();
+}
+
+window.setRefreshScheduleIndicator = setRefreshScheduleIndicator;
+window.clearRefreshScheduleIndicator = clearRefreshScheduleIndicator;
+
+function formatOperatorValue(value) {
+    if (value === null || value === undefined || value === "") return "-";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "-";
+    if (typeof value === "object") return JSON.stringify(value);
+    return String(value);
+}
+
+function formatDuration(msRemaining) {
+    if (msRemaining <= 0) return tr("auth.tokenExpired");
+    const totalSeconds = Math.floor(msRemaining / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return [hours, minutes, seconds]
+        .map((part) => String(part).padStart(2, "0"))
+        .join(":");
+}
+
+function clearTokenLifetimeTimers() {
+    Object.values(TOKEN_TIMER_IDS).forEach((id) => window.clearInterval(id));
+    Object.keys(TOKEN_TIMER_IDS).forEach((key) => delete TOKEN_TIMER_IDS[key]);
+    Object.keys(TOKEN_GUIDANCE_STATE).forEach((key) => {
+        TOKEN_GUIDANCE_STATE[key] = false;
+    });
+    refreshTokenGuidance();
+}
+
+function updateTokenLifetime(elementId, token) {
+    const element = document.getElementById(elementId);
+    if (!element || !token) return;
+
+    let decoded = null;
+    try {
+        decoded = parseJwt(token);
+    } catch (_err) {
+        element.className = "token-lifetime is-hidden";
+        element.textContent = "";
+        return;
+    }
+
+    if (!decoded.exp) {
+        element.className = "token-lifetime is-hidden";
+        element.textContent = "";
+        return;
+    }
+
+    const render = () => {
+        const remaining = (decoded.exp * 1000) - Date.now();
+        const isCritical = remaining <= 5 * 60 * 1000 && remaining > 0;
+        let state = "state-good";
+        if (remaining <= 5 * 60 * 1000) {
+            state = "state-critical";
+        } else if (remaining <= 15 * 60 * 1000) {
+            state = "state-warning";
+        }
+
+        element.textContent = tr("auth.tokenExpiresIn", { value: formatDuration(remaining) });
+        element.className = `token-lifetime ${state}`;
+        if (remaining <= 0) {
+            element.textContent = tr("auth.tokenExpired");
+        }
+
+        if (TOKEN_GUIDANCE_STATE[elementId] !== isCritical) {
+            TOKEN_GUIDANCE_STATE[elementId] = isCritical;
+            refreshTokenGuidance();
+        }
+
+        if (REFRESH_SCHEDULE_STATE.mode === "msal" && REFRESH_SCHEDULE_STATE.nextRefreshAt) {
+            renderRefreshScheduleIndicator();
+        }
+    };
+
+    render();
+    TOKEN_TIMER_IDS[elementId] = window.setInterval(render, 1000);
+}
+
+function buildClaimProvenance(accountClaims, accessClaims, idClaims) {
+    const provenanceMap = new Map();
+    [
+        ["account", accountClaims],
+        ["access", accessClaims],
+        ["id", idClaims],
+    ].forEach(([source, claims]) => {
+        Object.entries(claims || {}).forEach(([key, value]) => {
+            if (!provenanceMap.has(key)) {
+                provenanceMap.set(key, { sources: [], values: {} });
+            }
+            const entry = provenanceMap.get(key);
+            entry.sources.push(source);
+            entry.values[source] = value;
+        });
+    });
+
+    return Array.from(provenanceMap.entries())
+        .map(([claim, entry]) => {
+            const distinctValues = Array.from(new Set(Object.values(entry.values).map((value) => JSON.stringify(value))));
+            return {
+                claim,
+                sources: entry.sources,
+                sampleValue: Object.values(entry.values)[0],
+                hasConflict: distinctValues.length > 1,
+                values: entry.values,
+            };
+        })
+        .sort((left, right) => left.claim.localeCompare(right.claim));
+}
+
+function openClaimDiffViewer(claimName, encodedValues) {
+    const dialog = document.getElementById("claimDiffDialog");
+    const title = document.getElementById("claimDiffTitle");
+    const content = document.getElementById("claimDiffContent");
+    if (!dialog || !title || !content) return;
+
+    let values = {};
+    try {
+        values = JSON.parse(decodeURIComponent(encodedValues));
+    } catch (_err) {
+        values = {};
+    }
+
+    title.textContent = `${tr("auth.claimDiffTitle")}: ${claimName}`;
+    content.innerHTML = Object.entries(values).map(([source, value]) => (
+        `<div class="claim-diff-card">` +
+        `<div class="claim-diff-source">${escapeHtml(source)}</div>` +
+        `<pre class="claim-diff-value">${escapeHtml(JSON.stringify(value, null, 2))}</pre>` +
+        `</div>`
+    )).join("");
+    dialog.showModal();
+}
+
+window.openClaimDiffViewer = openClaimDiffViewer;
+
+function renderClaimProvenance(accountClaims, accessClaims, idClaims) {
+    const container = document.getElementById("claimProvenanceDiv");
+    const list = document.getElementById("claimProvenanceList");
+    if (!container || !list) return;
+
+    const provenance = buildClaimProvenance(accountClaims, accessClaims, idClaims).slice(0, 18);
+    if (provenance.length === 0) {
+        container.style.display = "none";
+        return;
+    }
+
+    list.innerHTML = provenance.map((entry) => (
+        `<div class="provenance-card">` +
+        `<div class="provenance-claim">${escapeHtml(entry.claim)}</div>` +
+        `<div class="provenance-sources">Sources: ${escapeHtml(entry.sources.join(", "))}</div>` +
+        `<div class="provenance-value">Value: ${escapeHtml(formatOperatorValue(entry.sampleValue))}</div>` +
+        (entry.hasConflict ? `<span class="provenance-conflict">Conflict</span><button type="button" class="provenance-action" onclick="openClaimDiffViewer('${escapeHtml(entry.claim).replace(/'/g, "&#39;")}', '${encodeURIComponent(JSON.stringify(entry.values))}')">${escapeHtml(tr("auth.viewDiff"))}</button>` : "") +
+        `</div>`
+    )).join("");
+    container.style.display = "block";
+}
+
+function renderOperatorSignInSummary(summaryData) {
+    const container = document.getElementById("operatorSignInSummary");
+    if (!container) return;
+
+    const rows = (summaryData && summaryData.value) || [];
+    if (rows.length === 0) {
+        container.innerHTML = `<div class="operator-summary-item"><span class="operator-summary-name">${escapeHtml(tr("operator.empty"))}</span></div>`;
+        return;
+    }
+
+    container.innerHTML = rows.slice(0, 8).map((row) => {
+        const label = row.authenticationMethod || row.signInMethod || row.method || row.id || "Unknown";
+        const total = row.signInCount ?? row.totalSignIns ?? row.total ?? "-";
+        const success = row.successfulSignInCount ?? row.successfulSignIns ?? row.succeeded ?? "-";
+        return (
+            `<div class="operator-summary-item">` +
+            `<span class="operator-summary-name">${escapeHtml(String(label))}</span>` +
+            `<span class="operator-summary-metric">Total: ${escapeHtml(String(total))}</span>` +
+            `<span class="operator-summary-metric">Success: ${escapeHtml(String(success))}</span>` +
+            `</div>`
+        );
+    }).join("");
+}
+
+function renderOperatorKvRows(elementId, entries) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
+
+    if (!entries || entries.length === 0) {
+        container.innerHTML = `<div class="operator-kv-row"><span class="operator-kv-key">Info</span><span class="operator-kv-value">${escapeHtml(tr("operator.empty"))}</span></div>`;
+        return;
+    }
+
+    container.innerHTML = entries.map((entry) => (
+        `<div class="operator-kv-row">` +
+        `<span class="operator-kv-key">${escapeHtml(entry.label)}</span>` +
+        `<span class="operator-kv-value">${escapeHtml(formatOperatorValue(entry.value))}</span>` +
+        `</div>`
+    )).join("");
+}
+
+function setOperatorMessage(message, isError) {
+    const messageEl = document.getElementById("operatorBetaMessage");
+    if (!messageEl) return;
+
+    if (!message) {
+        messageEl.textContent = "";
+        messageEl.className = "operator-message is-hidden";
+        return;
+    }
+
+    messageEl.textContent = message;
+    messageEl.className = isError ? "operator-message auth-notice-error" : "operator-message";
+}
+
+function getCurrentOperatorTarget(accountClaims) {
+    const claims = accountClaims || {};
+    return {
+        userId: getPreferredClaim(claims, ["oid", "sub"]),
+        userPrincipalName: getPreferredClaim(claims, ["preferred_username", "upn", "email"]),
+    };
+}
+
+function findRegistrationRecord(registrationData, target) {
+    const records = (registrationData && registrationData.value) || [];
+    return records.find((record) => (
+        record.id === target.userId ||
+        record.userPrincipalName === target.userPrincipalName ||
+        record.userDisplayName === target.userPrincipalName ||
+        record.id === target.identifier ||
+        record.userPrincipalName === target.identifier
+    )) || null;
+}
+
+function buildOperatorTarget(identifier, accountClaims) {
+    const current = getCurrentOperatorTarget(accountClaims || {});
+    const rawIdentifier = String(identifier || "").trim();
+    return {
+        identifier: rawIdentifier || current.userId || current.userPrincipalName,
+        userId: rawIdentifier || current.userId,
+        userPrincipalName: rawIdentifier || current.userPrincipalName,
+    };
+}
+
+async function openOperatorUserDrawer(targetIdentifier, accessToken, accountClaims) {
+    const dialog = document.getElementById("operatorUserDrawer");
+    const messageEl = document.getElementById("operatorDrawerMessage");
+    const grid = document.getElementById("operatorDrawerGrid");
+    const targetLabel = document.getElementById("operatorDrawerTarget");
+    if (!dialog || !messageEl || !grid || !targetLabel) return;
+
+    if (!ENABLE_OPERATOR_MODE || !ENABLE_BETA_GRAPH) {
+        messageEl.textContent = tr("operator.disabled");
+        messageEl.className = "operator-message auth-notice-error";
+        grid.style.display = "none";
+        dialog.showModal();
+        return;
+    }
+
+    const target = buildOperatorTarget(targetIdentifier, accountClaims || {});
+    if (!target.identifier) {
+        messageEl.textContent = tr("operator.searchRequired");
+        messageEl.className = "operator-message auth-notice-error";
+        grid.style.display = "none";
+        dialog.showModal();
+        return;
+    }
+
+    targetLabel.textContent = target.identifier;
+    messageEl.textContent = "";
+    messageEl.className = "operator-message is-hidden";
+    grid.style.display = "none";
+    dialog.showModal();
+
+    try {
+        const cached = getOperatorCacheEntry(target.identifier);
+        let registrationData;
+        let userDetail;
+        let authRequirements;
+        let signInPreferences;
+
+        if (cached) {
+            ({ registrationData, userDetail, authRequirements, signInPreferences } = cached);
+            messageEl.textContent = tr("operator.cached");
+            messageEl.className = "operator-message";
+        } else {
+            registrationData = latestOperatorRegistrationDetails || await window.getOperatorRegistrationDetails(accessToken);
+            [userDetail, authRequirements, signInPreferences] = await Promise.all([
+                window.getOperatorUserDetail(accessToken, target.identifier),
+                window.getOperatorAuthRequirements(accessToken, target.identifier),
+                window.getOperatorSignInPreferences(accessToken, target.identifier),
+            ]);
+            setOperatorCacheEntry(target.identifier, {
+                registrationData,
+                userDetail,
+                authRequirements,
+                signInPreferences,
+            });
+        }
+        const registrationRecord = findRegistrationRecord(registrationData, target);
+        addOperatorSearchHistory(target.identifier);
+
+        renderOperatorKvRows("operatorDrawerUserDetail", [
+            { label: "Display name", value: userDetail.displayName },
+            { label: "UPN", value: userDetail.userPrincipalName },
+            { label: "Object ID", value: userDetail.id },
+            { label: "Creation type", value: userDetail.creationType },
+            { label: "External state", value: userDetail.externalUserState },
+            { label: "Last sign-in", value: userDetail.signInActivity && userDetail.signInActivity.lastSuccessfulSignInDateTime },
+        ]);
+        renderOperatorKvRows("operatorDrawerAuthRequirements", [
+            { label: "Per-user MFA state", value: authRequirements.perUserMfaState },
+        ]);
+        renderOperatorKvRows("operatorDrawerSignInPreferences", [
+            { label: "Preferred secondary auth", value: signInPreferences.userPreferredMethodForSecondaryAuthentication },
+            { label: "System preferred enabled", value: signInPreferences.isSystemPreferredAuthenticationMethodEnabled },
+        ]);
+        renderOperatorKvRows("operatorDrawerRegistrationDetails", registrationRecord ? [
+            { label: "MFA registered", value: registrationRecord.isMfaRegistered },
+            { label: "SSPR registered", value: registrationRecord.isSsprRegistered },
+            { label: "Passwordless capable", value: registrationRecord.isPasswordlessCapable },
+            { label: "Registered methods", value: registrationRecord.methodsRegistered },
+        ] : [
+            { label: "Info", value: tr("operator.notFound") },
+        ]);
+        grid.style.display = "grid";
+    } catch (err) {
+        messageEl.textContent = tr("operator.permissionError");
+        messageEl.className = "operator-message auth-notice-error";
+        pushErrorHistory(err.response?.data || err);
+        showErrorDiagnostics(err.response?.data || err);
+    }
+}
+
+async function refreshOperatorInsights(accessToken, accountClaims) {
+    const panel = document.getElementById("operatorBetaDiv");
+    const loading = document.getElementById("operatorBetaLoading");
+    const grid = document.getElementById("operatorBetaGrid");
+    if (!panel || !loading || !grid) return;
+
+    panel.style.display = "block";
+    grid.style.display = "none";
+    renderOperatorSearchHistory();
+
+    if (!ENABLE_OPERATOR_MODE || !ENABLE_BETA_GRAPH) {
+        setOperatorMessage(tr("operator.disabled"), false);
+        return;
+    }
+
+    const target = getCurrentOperatorTarget(accountClaims || {});
+    if (!target.userId) {
+        setOperatorMessage(tr("operator.missingUserId"), true);
+        return;
+    }
+
+    if (!accessToken) {
+        setOperatorMessage(tr("msg.noSession"), true);
+        return;
+    }
+
+    loading.style.display = "block";
+    setOperatorMessage("", false);
+
+    try {
+        const [userDetail, authRequirements, signInPreferences, registrationDetails, signInSummary] = await Promise.all([
+            window.getOperatorUserDetail(accessToken, target.userId),
+            window.getOperatorAuthRequirements(accessToken, target.userId),
+            window.getOperatorSignInPreferences(accessToken, target.userId),
+            window.getOperatorRegistrationDetails(accessToken),
+            window.getOperatorSignInSummary(accessToken),
+        ]);
+
+        latestOperatorRegistrationDetails = registrationDetails;
+        const registrationRecord = findRegistrationRecord(registrationDetails, target);
+
+        renderOperatorKvRows("operatorUserDetail", [
+            { label: "Display name", value: userDetail.displayName },
+            { label: "UPN", value: userDetail.userPrincipalName },
+            { label: "Created", value: userDetail.createdDateTime },
+            { label: "Creation type", value: userDetail.creationType },
+            { label: "External state", value: userDetail.externalUserState },
+            { label: "Last password change", value: userDetail.lastPasswordChangeDateTime },
+            { label: "Last sign-in", value: userDetail.signInActivity && userDetail.signInActivity.lastSignInDateTime },
+        ]);
+
+        renderOperatorKvRows("operatorAuthRequirements", [
+            { label: "Per-user MFA state", value: authRequirements.perUserMfaState },
+        ]);
+
+        renderOperatorKvRows("operatorSignInPreferences", [
+            { label: "Preferred secondary auth", value: signInPreferences.userPreferredMethodForSecondaryAuthentication },
+            { label: "System preferred enabled", value: signInPreferences.isSystemPreferredAuthenticationMethodEnabled },
+        ]);
+
+        renderOperatorKvRows("operatorRegistrationDetails", registrationRecord ? [
+            { label: "MFA registered", value: registrationRecord.isMfaRegistered },
+            { label: "SSPR registered", value: registrationRecord.isSsprRegistered },
+            { label: "Passwordless capable", value: registrationRecord.isPasswordlessCapable },
+            { label: "Registered methods", value: registrationRecord.methodsRegistered },
+        ] : [
+            { label: "Info", value: tr("operator.notFound") },
+        ]);
+
+        renderOperatorSignInSummary(signInSummary);
+
+        grid.style.display = "grid";
+    } catch (err) {
+        console.warn("Failed to load operator insights:", err);
+        setOperatorMessage(tr("operator.permissionError"), true);
+        pushErrorHistory(err.response?.data || err);
+        showErrorDiagnostics(err.response?.data || err);
+    } finally {
+        loading.style.display = "none";
+    }
+}
+
+window.refreshOperatorInsights = function refreshOperatorInsightsFromWindow() {
+    const tokens = getSessionTokens();
+    const idToken = tokens.id_token ? parseJwt(tokens.id_token) : {};
+    return refreshOperatorInsights(tokens.access_token, idToken);
+};
+
+window.openOperatorUserDrawerFromSearch = function openOperatorUserDrawerFromSearch() {
+    const tokens = getSessionTokens();
+    const idToken = tokens.id_token ? parseJwt(tokens.id_token) : {};
+    const input = document.getElementById("operatorUserSearchInput");
+    const identifier = input ? input.value.trim() : "";
+    renderOperatorSearchHistory();
+    return openOperatorUserDrawer(identifier, tokens.access_token, idToken);
+};
+
+window.openOperatorUserDrawerFromHistory = function openOperatorUserDrawerFromHistory(identifier) {
+    const tokens = getSessionTokens();
+    const idToken = tokens.id_token ? parseJwt(tokens.id_token) : {};
+    const input = document.getElementById("operatorUserSearchInput");
+    if (input) input.value = identifier;
+    return openOperatorUserDrawer(identifier, tokens.access_token, idToken);
+};
+
+function pushErrorHistory(entry) {
+    ERROR_HISTORY.unshift(entry);
+    if (ERROR_HISTORY.length > 10) {
+        ERROR_HISTORY.length = 10;
+    }
+}
+
+function buildDiagnosticPayload(error) {
+    return {
+        status: error.status || error.error || "Unknown",
+        error: error.error || "Unknown",
+        suberror: error.suberror || "",
+        description: error.error_description || error.message || tr("misc.unknownError"),
+        flowName: error.flowName || "native-auth",
+        flowStep: error.flowStep || "unknown",
+        endpoint: error.endpoint || "",
+        method: error.method || "POST",
+        timestamp: error.timestamp || new Date().toISOString(),
+        trace_id: error.trace_id || "",
+        correlation_id: error.correlation_id || "",
+        requestPayload: error.requestPayload || {},
+        responsePayload: error.responsePayload || {},
+    };
+}
+
+function showErrorDiagnostics(error) {
+    const dialog = document.getElementById("errorDialog");
+    const panel = document.getElementById("errorDiagnosticsPanel");
+    if (!dialog || !panel) {
+        const message = error.error_description || error.message || tr("misc.unknownError");
+        alert(message);
+        return;
+    }
+
+    const payload = buildDiagnosticPayload(error);
+    lastDiagnosticPayload = payload;
+
+    panel.innerHTML = [
+        `<div class="diagnostic-grid">`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.status"))}</span><strong>${escapeHtml(String(payload.status))}</strong></div>`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.code"))}</span><strong>${escapeHtml(String(payload.error))}</strong></div>`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.suberror"))}</span><strong>${escapeHtml(String(payload.suberror || "-"))}</strong></div>`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.flowStep"))}</span><strong>${escapeHtml(String(payload.flowStep))}</strong></div>`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.endpoint"))}</span><strong>${escapeHtml(String(payload.endpoint))}</strong></div>`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.traceId"))}</span><strong>${escapeHtml(String(payload.trace_id || "-"))}</strong></div>`,
+        `<div class="diagnostic-row"><span>${escapeHtml(tr("diag.correlationId"))}</span><strong>${escapeHtml(String(payload.correlation_id || "-"))}</strong></div>`,
+        `</div>`,
+        `<div class="diagnostic-block"><h3>${escapeHtml(tr("diag.description"))}</h3><pre class="diagnostic-pre">${escapeHtml(payload.description)}</pre></div>`,
+        `<div class="diagnostic-block"><h3>${escapeHtml(tr("diag.request"))}</h3><pre class="diagnostic-pre">${escapeHtml(JSON.stringify(payload.requestPayload, null, 2))}</pre></div>`,
+        `<div class="diagnostic-block"><h3>${escapeHtml(tr("diag.response"))}</h3><pre class="diagnostic-pre">${escapeHtml(JSON.stringify(payload.responsePayload, null, 2))}</pre></div>`,
+    ].join("");
+
+    if (!dialog.open) {
+        dialog.showModal();
+    }
+}
+
+async function copyErrorDiagnostics() {
+    if (!lastDiagnosticPayload) return;
+    await navigator.clipboard.writeText(JSON.stringify(lastDiagnosticPayload, null, 2));
+    setLoginNotice("info", tr("msg.diagnosticsCopied"));
+}
+
+window.pushErrorHistory = pushErrorHistory;
+window.showErrorDiagnostics = showErrorDiagnostics;
+window.copyErrorDiagnostics = copyErrorDiagnostics;
+window.setDemoMode = setDemoMode;
+window.isDemoModeEnabled = isDemoModeEnabled;
 
 function getLocaleFromClaims(claims) {
     if (!claims || typeof claims !== "object") return null;
@@ -111,6 +893,9 @@ function renderComprehensiveUserProfile(context) {
 
     const locale = getLocaleFromClaims(mergedClaims) || (typeof window.getLocale === "function" ? window.getLocale() : "en");
 
+    const graphProfile = (context && context.graphProfile) || {};
+    const tapMethods = (context && context.tapMethods) || [];
+
     const userSummary = [
         { label: "Display Name", value: getPreferredClaim(mergedClaims, ["name", "displayName"]) || tr("misc.user") },
         { label: "Given Name", value: getPreferredClaim(mergedClaims, ["given_name"]) || "-" },
@@ -120,6 +905,9 @@ function renderComprehensiveUserProfile(context) {
         { label: "Tenant ID", value: getPreferredClaim(mergedClaims, ["tid", "tenantId"]) || "-" },
         { label: "Object ID", value: getPreferredClaim(mergedClaims, ["oid", "sub"]) || "-" },
         { label: "Authentication Method", value: getPreferredClaim(mergedClaims, ["amr", "acr"]) || "-" },
+        { label: "External User State", value: graphProfile.externalUserState || "-" },
+        { label: "Account Created", value: graphProfile.createdDateTime || "-" },
+        { label: "TAP Methods", value: tapMethods.length > 0 ? String(tapMethods.length) : "0" },
     ];
 
     highlights.innerHTML = userSummary.map((item) => {
@@ -140,10 +928,14 @@ function renderComprehensiveUserProfile(context) {
             access_token_claims: accessClaims,
             account_claims: accountClaims,
             merged_claims: mergedClaims,
+            graph_profile: graphProfile,
+            tap_methods: tapMethods,
         },
         null,
         2
     );
+
+    renderClaimProvenance(accountClaims, accessClaims, idClaims);
 
     profileDiv.style.display = "block";
 }
@@ -164,12 +956,56 @@ function getSessionTokens() {
 }
 
 function clearSessionTokens() {
-    Object.values(SESSION_KEYS).forEach((key) => sessionStorage.removeItem(key));
+    clearTokenLifetimeTimers();
+    sessionStorage.removeItem(SESSION_KEYS.ACCESS_TOKEN);
+    sessionStorage.removeItem(SESSION_KEYS.ID_TOKEN);
+    sessionStorage.removeItem(SESSION_KEYS.REFRESH_TOKEN);
+    sessionStorage.removeItem(SESSION_KEYS.INTERACTION_TYPE);
+    interactionType = "";
+    clearRefreshScheduleIndicator();
 }
 
 function hasActiveSession() {
     return !!sessionStorage.getItem(SESSION_KEYS.ACCESS_TOKEN);
 }
+
+window.hasNativeSession = hasActiveSession;
+
+async function refreshCurrentSession() {
+    const currentInteraction = getSessionInteractionType();
+    if (currentInteraction === "native" && typeof window.refreshNativeAuthSession === "function") {
+        return window.refreshNativeAuthSession();
+    }
+    if (typeof window.hasMsalAccount === "function" && window.hasMsalAccount() && typeof window.refreshMsalSessionSilently === "function") {
+        return window.refreshMsalSessionSilently({ forceRefresh: true, reason: "manual" });
+    }
+    setLoginNotice("info", tr("msg.noSession"));
+    return null;
+}
+
+function reauthenticateCurrentSession() {
+    const currentInteraction = getSessionInteractionType();
+    if (currentInteraction === "native" && typeof window.promptNativeReauthentication === "function") {
+        return window.promptNativeReauthentication();
+    }
+
+    if (typeof window.hasMsalAccount === "function" && window.hasMsalAccount()) {
+        const lastMode = sessionStorage.getItem(SESSION_KEYS.INTERACTION_TYPE) || "popup";
+        if (lastMode === "redirect" && typeof window.loginRedirect === "function") {
+            return window.loginRedirect();
+        }
+        if (typeof window.loginPopup === "function") {
+            return window.loginPopup();
+        }
+    }
+
+    renderUnauthenticatedUI();
+    setLoginNotice("info", tr("auth.reauthPrompt"));
+    return null;
+}
+
+window.refreshCurrentSession = refreshCurrentSession;
+window.reauthenticateCurrentSession = reauthenticateCurrentSession;
 
 // ---------------------------------------------------------------------------
 // UI rendering
@@ -182,6 +1018,8 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     if (typeof tokenResponse === "object") {
         storeSessionTokens(tokenResponse);
     }
+    setSessionInteractionType("native");
+    setRefreshScheduleIndicator({ mode: "native", strategy: "on-demand", nextRefreshAt: null });
 
     const decodedToken = parseJwt(accessToken);
     const idToken = typeof tokenResponse === "object" ? tokenResponse.id_token : null;
@@ -189,6 +1027,7 @@ function renderNativeAuthenticatedUI(tokenResponse) {
 
     applyLocaleFromClaims(decodedIdToken || decodedToken);
 
+    clearLoginNotice();
     console.log("Decoded token payload:", decodedToken);
     document.getElementById("authenticatedDiv").style.display = "block";
     document.getElementById("loginDiv").style.display = "none";
@@ -211,6 +1050,7 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     // Display token details
     const tokens = typeof tokenResponse === "object" ? tokenResponse : getSessionTokens();
     displayTokenDetails(tokens);
+    applyDemoModeState();
     renderComprehensiveUserProfile({
         accessToken: tokens.access_token || accessToken,
         idToken: tokens.id_token || "",
@@ -219,6 +1059,8 @@ function renderNativeAuthenticatedUI(tokenResponse) {
 
     // Fetch and display registered authentication methods
     fetchAndDisplayAuthMethods(tokens.access_token || accessToken);
+    enrichProfileWithGraphSelfService(tokens.access_token || accessToken, decodedIdToken || {});
+    refreshOperatorInsights(tokens.access_token || accessToken, decodedIdToken || {});
 }
 
 function renderAuthenticatedUI(authResult) {
@@ -231,6 +1073,11 @@ function renderAuthenticatedUI(authResult) {
     const accessToken = authResult && authResult.accessToken ? authResult.accessToken : "";
     const idToken = authResult && authResult.idToken ? authResult.idToken : "";
 
+    if (typeof window.hasMsalAccount === "function" && window.hasMsalAccount()) {
+        setRefreshScheduleIndicator({ mode: "msal", strategy: "silent" });
+    }
+
+    clearLoginNotice();
     displayTokenDetails({
         access_token: accessToken,
         id_token: idToken,
@@ -241,12 +1088,22 @@ function renderAuthenticatedUI(authResult) {
         idToken,
         accountClaims: idTokenClaims,
     });
+    applyDemoModeState();
+    if (accessToken) {
+        fetchAndDisplayAuthMethods(accessToken);
+        enrichProfileWithGraphSelfService(accessToken, idTokenClaims);
+        refreshOperatorInsights(accessToken, idTokenClaims);
+    }
 }
 
 function renderUnauthenticatedUI() {
+    clearTokenLifetimeTimers();
+    clearRefreshScheduleIndicator();
     document.getElementById("authenticatedDiv").style.display = "none";
     document.getElementById("loginDiv").style.display = "block";
     document.getElementById("firstName").innerText = "";
+    renderOperatorSearchHistory();
+    applyDemoModeState();
 }
 
 // ---------------------------------------------------------------------------
@@ -268,13 +1125,39 @@ function restoreSession() {
         document.getElementById("loginDiv").style.display = "none";
         document.getElementById("firstName").innerText = decodedToken.name || "User";
         displayTokenDetails(tokens);
+        applyDemoModeState();
         renderComprehensiveUserProfile({
             accessToken: tokens.access_token,
             idToken: tokens.id_token,
             accountClaims: tokens.id_token ? parseJwt(tokens.id_token) : {},
         });
         fetchAndDisplayAuthMethods(tokens.access_token);
+        enrichProfileWithGraphSelfService(tokens.access_token, tokens.id_token ? parseJwt(tokens.id_token) : {});
+        refreshOperatorInsights(tokens.access_token, tokens.id_token ? parseJwt(tokens.id_token) : {});
         console.log("Session restored for:", decodedToken.name);
+    }
+}
+
+async function enrichProfileWithGraphSelfService(accessToken, accountClaims) {
+    if (!accessToken || typeof window.getGraphSelfServiceProfile !== "function") {
+        return;
+    }
+
+    try {
+        const [graphProfile, tapResponse] = await Promise.all([
+            window.getGraphSelfServiceProfile(accessToken),
+            window.getGraphSelfServiceTapMethods(accessToken),
+        ]);
+
+        renderComprehensiveUserProfile({
+            accessToken,
+            idToken: getSessionTokens().id_token,
+            accountClaims: accountClaims || {},
+            graphProfile,
+            tapMethods: (tapResponse && tapResponse.value) || [],
+        });
+    } catch (err) {
+        pushErrorHistory(err.response?.data || err);
     }
 }
 
@@ -285,6 +1168,7 @@ function displayTokenDetails(tokens) {
     const detailsDiv = document.getElementById("tokenDetailsDiv");
     if (!detailsDiv) return;
     detailsDiv.style.display = "block";
+    clearTokenLifetimeTimers();
 
     // Access Token
     if (tokens.access_token) {
@@ -292,6 +1176,7 @@ function displayTokenDetails(tokens) {
         renderTokenCard("accessTokenBody", "accessTokenScopes", decoded);
         const atRaw = document.getElementById("accessTokenRaw");
         if (atRaw) atRaw.textContent = tokens.access_token;
+        updateTokenLifetime("accessTokenLifetime", tokens.access_token);
     }
 
     // ID Token
@@ -300,6 +1185,7 @@ function displayTokenDetails(tokens) {
         renderTokenCard("idTokenBody", "idTokenScopes", decoded);
         const idRaw = document.getElementById("idTokenRaw");
         if (idRaw) idRaw.textContent = tokens.id_token;
+        updateTokenLifetime("idTokenLifetime", tokens.id_token);
     }
 
     // Refresh Token (opaque — just show as-is)
@@ -307,6 +1193,12 @@ function displayTokenDetails(tokens) {
     if (rtBody) {
         rtBody.textContent = tokens.refresh_token || "(not issued)";
     }
+
+    if (!tokens.access_token && !tokens.id_token) {
+        refreshTokenGuidance();
+    }
+
+    applyDemoModeState();
 }
 
 function renderTokenCard(bodyId, scopesId, decoded) {
@@ -347,6 +1239,11 @@ function toggleTokenBody(elementId) {
 }
 
 function toggleRawToken(elementId, btn) {
+    if (!isDemoModeEnabled()) {
+        setLoginNotice("info", tr("msg.enableDemoMode"));
+        return;
+    }
+
     const el = document.getElementById(elementId);
     if (!el) return;
     const isHidden = window.getComputedStyle(el).display === "none";
@@ -379,13 +1276,10 @@ async function fetchAndDisplayAuthMethods(accessToken) {
     if (list) list.innerHTML = "";
 
     try {
-        const response = await axios.get(
-            "https://graph.microsoft.com/v1.0/me/authentication/methods",
-            { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
+        const response = await window.getGraphSelfServiceAuthMethods(accessToken);
         if (loading) loading.style.display = "none";
 
-        const methods = response.data.value || [];
+        const methods = response.value || [];
         if (methods.length === 0) {
             list.innerHTML = `<div class="auth-methods-error">${tr("msg.methodsNone")}</div>`;
             return;
@@ -410,6 +1304,7 @@ async function fetchAndDisplayAuthMethods(accessToken) {
         });
     } catch (err) {
         console.warn("Failed to fetch authentication methods:", err);
+        pushErrorHistory(err.response?.data || err);
         if (loading) loading.style.display = "none";
         if (list) {
             list.innerHTML = `<div class="auth-methods-error">${tr("msg.methodsLoadFailed")}</div>`;
@@ -476,24 +1371,15 @@ async function addPhoneAuthMethod(phoneNumber, phoneType) {
     }
 
     try {
-        const userEmail = sessionStorage.getItem("nativeAuth_user_email");
-        await axios.post(
-            `https://graph.microsoft.com/v1.0/users/${userEmail}/authentication/phoneMethods`,
-            { phoneNumber, phoneType },
-            {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    "Content-Type": "application/json",
-                },
-            }
-        );
+        await window.addGraphSelfServicePhoneMethod(accessToken, phoneNumber, phoneType);
         alert(tr("msg.phoneAdded"));
         // Refresh the auth methods list
         await fetchAndDisplayAuthMethods(accessToken);
     } catch (err) {
         console.error("Failed to add phone auth method:", err);
         const msg = err.response?.data?.error?.message || err.message || tr("misc.unknownError");
-        alert(tr("msg.phoneAddFailed", { message: msg }));
+        setLoginNotice("error", tr("msg.phoneAddFailed", { message: msg }));
+        showErrorDiagnostics(err.response?.data || err);
     }
 }
 
