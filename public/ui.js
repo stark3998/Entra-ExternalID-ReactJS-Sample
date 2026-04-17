@@ -20,7 +20,7 @@ function parseJwt(token) {
 }
 
 // ---------------------------------------------------------------------------
-// Session token helpers (sessionStorage)
+// Session token helpers (persistent localStorage)
 // ---------------------------------------------------------------------------
 const SESSION_KEYS = {
     ACCESS_TOKEN: "nativeAuth_access_token",
@@ -29,6 +29,38 @@ const SESSION_KEYS = {
     INTERACTION_TYPE: "nativeAuth_interaction_type",
     DEMO_MODE: "nativeAuth_demo_mode",
 };
+
+const SESSION_STORAGE = window.localStorage;
+const LEGACY_SESSION_STORAGE = window.sessionStorage;
+
+function getSessionItem(key) {
+    const persisted = SESSION_STORAGE.getItem(key);
+    if (persisted !== null) return persisted;
+    return LEGACY_SESSION_STORAGE.getItem(key);
+}
+
+function setSessionItem(key, value) {
+    SESSION_STORAGE.setItem(key, value);
+    LEGACY_SESSION_STORAGE.removeItem(key);
+}
+
+function removeSessionItem(key) {
+    SESSION_STORAGE.removeItem(key);
+    LEGACY_SESSION_STORAGE.removeItem(key);
+}
+
+function migrateLegacySessionStorage() {
+    Object.values(SESSION_KEYS).forEach((key) => {
+        if (SESSION_STORAGE.getItem(key) !== null) return;
+        const legacyValue = LEGACY_SESSION_STORAGE.getItem(key);
+        if (legacyValue !== null) {
+            SESSION_STORAGE.setItem(key, legacyValue);
+            LEGACY_SESSION_STORAGE.removeItem(key);
+        }
+    });
+}
+
+migrateLegacySessionStorage();
 
 const ERROR_HISTORY = [];
 let lastDiagnosticPayload = null;
@@ -59,14 +91,14 @@ function getDemoModeFallback() {
 }
 
 function isDemoModeEnabled() {
-    const stored = sessionStorage.getItem(SESSION_KEYS.DEMO_MODE);
+    const stored = getSessionItem(SESSION_KEYS.DEMO_MODE);
     if (stored === null) return getDemoModeFallback();
     return stored === "true";
 }
 
 function setDemoMode(value, options = {}) {
     const enabled = Boolean(value);
-    sessionStorage.setItem(SESSION_KEYS.DEMO_MODE, enabled ? "true" : "false");
+    setSessionItem(SESSION_KEYS.DEMO_MODE, enabled ? "true" : "false");
 
     const toggle = document.getElementById("demoModeToggle");
     if (toggle) {
@@ -120,14 +152,14 @@ function clearLoginNotice() {
 function setSessionInteractionType(type) {
     interactionType = type || "";
     if (!type) {
-        sessionStorage.removeItem(SESSION_KEYS.INTERACTION_TYPE);
+        removeSessionItem(SESSION_KEYS.INTERACTION_TYPE);
         return;
     }
-    sessionStorage.setItem(SESSION_KEYS.INTERACTION_TYPE, type);
+    setSessionItem(SESSION_KEYS.INTERACTION_TYPE, type);
 }
 
 function getSessionInteractionType() {
-    return interactionType || sessionStorage.getItem(SESSION_KEYS.INTERACTION_TYPE) || (hasActiveSession() ? "native" : "");
+    return interactionType || getSessionItem(SESSION_KEYS.INTERACTION_TYPE) || (hasActiveSession() ? "native" : "");
 }
 
 window.setSessionInteractionType = setSessionInteractionType;
@@ -732,10 +764,11 @@ async function refreshOperatorInsights(accessToken, accountClaims) {
     }
 }
 
+const _refreshOperatorInsightsImpl = refreshOperatorInsights;
 window.refreshOperatorInsights = function refreshOperatorInsightsFromWindow() {
     const tokens = getSessionTokens();
     const idToken = tokens.id_token ? parseJwt(tokens.id_token) : {};
-    return refreshOperatorInsights(tokens.access_token, idToken);
+    return _refreshOperatorInsightsImpl(tokens.access_token, idToken);
 };
 
 window.openOperatorUserDrawerFromSearch = function openOperatorUserDrawerFromSearch() {
@@ -949,32 +982,32 @@ function renderComprehensiveUserProfile(context) {
 }
 
 function storeSessionTokens(tokenResponse) {
-    if (tokenResponse.access_token) sessionStorage.setItem(SESSION_KEYS.ACCESS_TOKEN, tokenResponse.access_token);
-    if (tokenResponse.id_token) sessionStorage.setItem(SESSION_KEYS.ID_TOKEN, tokenResponse.id_token);
-    if (tokenResponse.refresh_token) sessionStorage.setItem(SESSION_KEYS.REFRESH_TOKEN, tokenResponse.refresh_token);
-    sessionStorage.setItem(SESSION_KEYS.INTERACTION_TYPE, "native");
+    if (tokenResponse.access_token) setSessionItem(SESSION_KEYS.ACCESS_TOKEN, tokenResponse.access_token);
+    if (tokenResponse.id_token) setSessionItem(SESSION_KEYS.ID_TOKEN, tokenResponse.id_token);
+    if (tokenResponse.refresh_token) setSessionItem(SESSION_KEYS.REFRESH_TOKEN, tokenResponse.refresh_token);
+    setSessionItem(SESSION_KEYS.INTERACTION_TYPE, "native");
 }
 
 function getSessionTokens() {
     return {
-        access_token: sessionStorage.getItem(SESSION_KEYS.ACCESS_TOKEN),
-        id_token: sessionStorage.getItem(SESSION_KEYS.ID_TOKEN),
-        refresh_token: sessionStorage.getItem(SESSION_KEYS.REFRESH_TOKEN),
+        access_token: getSessionItem(SESSION_KEYS.ACCESS_TOKEN),
+        id_token: getSessionItem(SESSION_KEYS.ID_TOKEN),
+        refresh_token: getSessionItem(SESSION_KEYS.REFRESH_TOKEN),
     };
 }
 
 function clearSessionTokens() {
     clearTokenLifetimeTimers();
-    sessionStorage.removeItem(SESSION_KEYS.ACCESS_TOKEN);
-    sessionStorage.removeItem(SESSION_KEYS.ID_TOKEN);
-    sessionStorage.removeItem(SESSION_KEYS.REFRESH_TOKEN);
-    sessionStorage.removeItem(SESSION_KEYS.INTERACTION_TYPE);
+    removeSessionItem(SESSION_KEYS.ACCESS_TOKEN);
+    removeSessionItem(SESSION_KEYS.ID_TOKEN);
+    removeSessionItem(SESSION_KEYS.REFRESH_TOKEN);
+    removeSessionItem(SESSION_KEYS.INTERACTION_TYPE);
     interactionType = "";
     clearRefreshScheduleIndicator();
 }
 
 function hasActiveSession() {
-    return !!sessionStorage.getItem(SESSION_KEYS.ACCESS_TOKEN);
+    return !!getSessionItem(SESSION_KEYS.ACCESS_TOKEN);
 }
 
 window.hasNativeSession = hasActiveSession;
@@ -998,7 +1031,7 @@ function reauthenticateCurrentSession() {
     }
 
     if (typeof window.hasMsalAccount === "function" && window.hasMsalAccount()) {
-        const lastMode = sessionStorage.getItem(SESSION_KEYS.INTERACTION_TYPE) || "popup";
+        const lastMode = getSessionItem(SESSION_KEYS.INTERACTION_TYPE) || "popup";
         if (lastMode === "redirect" && typeof window.loginRedirect === "function") {
             return window.loginRedirect();
         }
@@ -1055,7 +1088,7 @@ function renderNativeAuthenticatedUI(tokenResponse) {
 
     // Store user email in session
     if (decodedToken.upn) {
-        sessionStorage.setItem("nativeAuth_user_email", decodedToken.upn);
+        setSessionItem("nativeAuth_user_email", decodedToken.upn);
     }
 
     // Display token details
@@ -1123,10 +1156,23 @@ function showHomePage() {
     _setNavActive("home");
     // Show/hide Sign In button
     const signInBtn = document.getElementById("navSignInBtn");
-    if (signInBtn) signInBtn.style.display = "inline-block";
+    if (signInBtn) signInBtn.style.display = hasAnyActiveSession() ? "none" : "inline-block";
 }
 
 function showLoginPage() {
+    if (hasAnyActiveSession()) {
+        const homeDiv = document.getElementById("homeDiv");
+        const loginDiv = document.getElementById("loginDiv");
+        const authDiv  = document.getElementById("authenticatedDiv");
+        if (homeDiv)  homeDiv.style.display    = "none";
+        if (loginDiv) loginDiv.style.display   = "none";
+        if (authDiv)  authDiv.style.display    = "block";
+        _setNavActive("");
+        const signInBtn = document.getElementById("navSignInBtn");
+        if (signInBtn) signInBtn.style.display = "none";
+        return;
+    }
+
     const homeDiv = document.getElementById("homeDiv");
     const loginDiv = document.getElementById("loginDiv");
     const authDiv  = document.getElementById("authenticatedDiv");
@@ -1135,6 +1181,12 @@ function showLoginPage() {
     if (authDiv)  authDiv.style.display    = "none";
     _setNavActive("login");
     window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function hasAnyActiveSession() {
+    const nativeSession = typeof hasActiveSession === "function" && hasActiveSession();
+    const msalSession = typeof window.hasMsalAccount === "function" && window.hasMsalAccount();
+    return Boolean(nativeSession || msalSession);
 }
 
 function scrollToDocsSection() {
@@ -1193,7 +1245,7 @@ function renderUnauthenticatedUI() {
 function restoreSession() {
     if (hasActiveSession()) {
         const tokens = getSessionTokens();
-        interactionType = sessionStorage.getItem(SESSION_KEYS.INTERACTION_TYPE) || "native";
+        interactionType = getSessionItem(SESSION_KEYS.INTERACTION_TYPE) || "native";
         const decodedToken = parseJwt(tokens.access_token);
         if (tokens.id_token) {
             try {

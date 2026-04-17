@@ -44,7 +44,7 @@ const msalConfig = {
     redirectUri: runtimeConfig.REDIRECT_URI || DEFAULTS.redirectUri,
   },
   cache: {
-    cacheLocation: "sessionStorage",
+    cacheLocation: "localStorage",
     storeAuthStateInCookie: false,
   }
 };

@@ -11,7 +11,7 @@
     "dev": "node scripts/start-stack.js",
     "dev:plain": "node scripts/start-stack.js --plain",
     "start": "npm run ports:kill && npm run start:raw",
-    "start:raw": "node server.js",
+    "start:raw": "node --env-file=.env server.js",
     "start:env": "npm run ports:kill && npm run start:env:raw",
     "start:env:raw": "node --env-file-if-exists=.env server.js",
     "cors": "npm run ports:kill && npm run cors:raw",
