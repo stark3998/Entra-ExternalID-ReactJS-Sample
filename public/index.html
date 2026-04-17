@@ -24,6 +24,569 @@
   <div class="ambient-shape ambient-shape-1" aria-hidden="true"></div>
   <div class="ambient-shape ambient-shape-2" aria-hidden="true"></div>
 
+  <!-- ================================================================
+       SITE NAVBAR
+       ================================================================ -->
+  <header id="siteNavbar" class="site-navbar">
+    <div class="site-navbar-inner">
+      <!-- Brand -->
+      <a href="#" class="navbar-brand" onclick="showHomePage(); return false;" aria-label="CodexJay External ID home">
+        <svg class="navbar-brand-icon" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <rect width="28" height="28" rx="6" fill="#0078d4"/>
+          <path d="M7 14c0-3.866 3.134-7 7-7s7 3.134 7 7-3.134 7-7 7-7-3.134-7-7z" fill="none" stroke="#fff" stroke-width="2"/>
+          <circle cx="14" cy="14" r="3" fill="#fff"/>
+        </svg>
+        <span class="navbar-brand-name">CodexJay <span class="navbar-brand-accent">External ID</span></span>
+      </a>
+
+      <!-- Desktop nav links -->
+      <nav class="navbar-links" aria-label="Main navigation">
+        <a href="#" class="navbar-link navbar-link-home" data-nav="home" onclick="showHomePage(); return false;" data-i18n="nav.home">Home</a>
+        <a href="#" class="navbar-link" data-nav="docs" onclick="scrollToDocsSection(); return false;" data-i18n="nav.docs">Documentation</a>
+        <a href="#" class="navbar-link navbar-link-cta" data-nav="login" onclick="showLoginPage(); return false;" id="navSignInBtn" data-i18n="nav.signIn">Sign In</a>
+      </nav>
+
+      <!-- Right utilities: demo mode + theme (always accessible) -->
+      <div class="navbar-utils">
+        <label class="demo-mode-toggle navbar-demo-toggle">
+          <input id="demoModeToggle" type="checkbox" onchange="setDemoMode(this.checked)">
+          <span data-i18n="demo.toggle">Demo mode</span>
+        </label>
+        <label class="theme-label navbar-theme-label" for="themeSelect" data-i18n="theme.label">Theme</label>
+        <select id="themeSelect" class="theme-select" aria-label="Theme selector">
+          <option value="azure-portal" data-i18n="theme.azurePortal">Azure Portal</option>
+          <option value="enterprise-blue" data-i18n="theme.enterpriseBlue">Enterprise Blue</option>
+          <option value="fintech-slate" data-i18n="theme.fintechSlate">Fintech Slate</option>
+        </select>
+        <!-- Hamburger button (mobile only) -->
+        <button type="button" class="navbar-hamburger" id="navHamburger" aria-label="Toggle menu" aria-expanded="false" onclick="toggleNavMenu()">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile dropdown menu -->
+    <div class="navbar-mobile-menu is-hidden" id="navMobileMenu">
+      <a href="#" class="navbar-mobile-link" onclick="showHomePage(); toggleNavMenu(); return false;" data-i18n="nav.home">Home</a>
+      <a href="#" class="navbar-mobile-link" onclick="scrollToDocsSection(); toggleNavMenu(); return false;" data-i18n="nav.docs">Documentation</a>
+      <a href="#" class="navbar-mobile-link navbar-mobile-link-cta" onclick="showLoginPage(); toggleNavMenu(); return false;" data-i18n="nav.signIn">Sign In</a>
+    </div>
+  </header>
+
+  <!-- ================================================================
+       HOMEPAGE
+       ================================================================ -->
+  <div id="homeDiv" class="home-page">
+
+    <!-- Hero Section -->
+    <section class="home-hero">
+      <div class="home-hero-inner">
+        <p class="home-eyebrow" data-i18n="home.eyebrow">Microsoft Entra External ID</p>
+        <h1 class="home-hero-title" data-i18n="home.heroTitle">Native Authentication for External Identities</h1>
+        <p class="home-hero-subtitle" data-i18n="home.heroSubtitle">A direct, CORS-friendly API surface for building fully custom sign-in, sign-up, MFA, and password reset flows without redirecting users away from your application.</p>
+        <div class="home-hero-actions">
+          <button type="button" class="btn-home-primary" onclick="showLoginPage()" data-i18n="home.tryLive">Try it live →</button>
+          <a href="#docs-overview" class="btn-home-secondary" data-i18n="home.exploreApi">Explore the API</a>
+        </div>
+        <div class="home-hero-badges">
+          <span class="home-badge">Native Auth APIs</span>
+          <span class="home-badge">MSAL Popup &amp; Redirect</span>
+          <span class="home-badge">MFA &amp; Registration</span>
+          <span class="home-badge">Token Inspection</span>
+          <span class="home-badge">Operator Mode</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick overview cards -->
+    <section class="home-section home-section-cards" id="docs-overview">
+      <div class="home-section-inner">
+        <h2 class="home-section-title" data-i18n="home.overviewTitle">What is Native Authentication?</h2>
+        <p class="home-section-lead" data-i18n="home.overviewLead">Native Authentication lets your application call Entra External ID endpoints directly using standard OAuth 2.0 grants — no hosted login page required. Your UI stays in full control at every step.</p>
+        <div class="home-cards">
+          <div class="home-card">
+            <div class="home-card-icon">🔑</div>
+            <h3 class="home-card-title" data-i18n="home.card1Title">Full UI Control</h3>
+            <p class="home-card-body" data-i18n="home.card1Body">Design and brand every step of the authentication journey. No redirects, no hosted pages, no compromise on user experience.</p>
+          </div>
+          <div class="home-card">
+            <div class="home-card-icon">📡</div>
+            <h3 class="home-card-title" data-i18n="home.card2Title">Direct API Access</h3>
+            <p class="home-card-body" data-i18n="home.card2Body">Calls are made through a local CORS proxy in development. Each step returns a continuation token that drives the next request.</p>
+          </div>
+          <div class="home-card">
+            <div class="home-card-icon">🔒</div>
+            <h3 class="home-card-title" data-i18n="home.card3Title">MFA &amp; Registration</h3>
+            <p class="home-card-body" data-i18n="home.card3Body">Handles MFA challenges (OTP via email/SMS), strong method registration, and self-service password reset — all within the same API contract.</p>
+          </div>
+          <div class="home-card">
+            <div class="home-card-icon">🔄</div>
+            <h3 class="home-card-title" data-i18n="home.card4Title">Token Renewal</h3>
+            <p class="home-card-body" data-i18n="home.card4Body">Use the issued refresh token to silently renew sessions via the same token endpoint, extending user sessions without re-authentication.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Reference -->
+    <section class="home-section home-section-alt" id="docs-api">
+      <div class="home-section-inner">
+        <h2 class="home-section-title" data-i18n="home.apiTitle">API Reference</h2>
+        <p class="home-section-lead" data-i18n="home.apiLead">All endpoints are relative to your tenant authority: <code class="home-inline-code">https://{subdomain}.ciamlogin.com/{tenantId}</code></p>
+
+        <!-- initiate -->
+        <div class="api-endpoint-card" id="api-initiate">
+          <div class="api-endpoint-header" onclick="toggleApiCard('api-initiate')">
+            <div class="api-endpoint-method">POST</div>
+            <div class="api-endpoint-path">/oauth2/v2.0/initiate</div>
+            <div class="api-endpoint-summary" data-i18n="api.initiate.summary">Start a sign-in flow and obtain the first continuation token</div>
+            <div class="api-endpoint-toggle">▼</div>
+          </div>
+          <div class="api-endpoint-body">
+            <div class="api-cols">
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.params">Parameters</h4>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td><td>App registration client ID</td></tr>
+                    <tr><td><code>username</code></td><td class="api-required">✓</td><td>User's email / UPN</td></tr>
+                    <tr><td><code>challenge_type</code></td><td class="api-required">✓</td><td>Space-separated list: <code>password oob redirect</code>. Must include <code>redirect</code> as required fallback.</td></tr>
+                  </tbody>
+                </table>
+                <h4 class="api-param-heading" data-i18n="api.response">Response</h4>
+                <table class="api-table">
+                  <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>continuation_token</code></td><td>Opaque token to pass to /challenge</td></tr>
+                    <tr><td><code>challenge_type</code></td><td><code>redirect</code> when app must fall back to hosted login</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h4 class="api-param-heading">Common Errors</h4>
+                <table class="api-table">
+                  <thead><tr><th>Error / Suberror</th><th>Cause</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>user_not_found</code></td><td>No account with that username</td></tr>
+                    <tr><td><code>nativeauthapi_disabled</code></td><td>Native Auth not enabled for tenant</td></tr>
+                    <tr><td><code>invalid_client</code></td><td>Incorrect client_id or app not registered</td></tr>
+                  </tbody>
+                </table>
+                <pre class="api-code-example">{
+  "client_id": "...",
+  "username": "user@contoso.com",
+  "challenge_type": "password oob redirect"
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- challenge -->
+        <div class="api-endpoint-card" id="api-challenge">
+          <div class="api-endpoint-header" onclick="toggleApiCard('api-challenge')">
+            <div class="api-endpoint-method">POST</div>
+            <div class="api-endpoint-path">/oauth2/v2.0/challenge</div>
+            <div class="api-endpoint-summary" data-i18n="api.challenge.summary">Select the authentication method for this user session</div>
+            <div class="api-endpoint-toggle">▼</div>
+          </div>
+          <div class="api-endpoint-body">
+            <div class="api-cols">
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.params">Parameters</h4>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td><td>App registration client ID</td></tr>
+                    <tr><td><code>continuation_token</code></td><td class="api-required">✓</td><td>Token from /initiate or /token</td></tr>
+                    <tr><td><code>challenge_type</code></td><td class="api-required">✓</td><td>Supported types: <code>password oob redirect</code></td></tr>
+                    <tr><td><code>id</code></td><td></td><td>Method ID from /introspect (for MFA challenge selection)</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.response">Response</h4>
+                <table class="api-table">
+                  <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>challenge_type</code></td><td><code>password</code>, <code>oob</code>, or <code>redirect</code></td></tr>
+                    <tr><td><code>continuation_token</code></td><td>Updated token for next step</td></tr>
+                    <tr><td><code>challenge_channel</code></td><td>OOB delivery channel (<code>email</code>)</td></tr>
+                    <tr><td><code>challenge_target_label</code></td><td>Masked delivery address (e.g. <code>a***@c.com</code>)</td></tr>
+                    <tr><td><code>code_length</code></td><td>Expected OTP length</td></tr>
+                  </tbody>
+                </table>
+                <pre class="api-code-example">{
+  "challenge_type": "oob",
+  "challenge_channel": "email",
+  "challenge_target_label": "u***@contoso.com",
+  "code_length": 8,
+  "continuation_token": "..."
+}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- token -->
+        <div class="api-endpoint-card" id="api-token">
+          <div class="api-endpoint-header" onclick="toggleApiCard('api-token')">
+            <div class="api-endpoint-method">POST</div>
+            <div class="api-endpoint-path">/oauth2/v2.0/token</div>
+            <div class="api-endpoint-summary" data-i18n="api.token.summary">Verify credential and issue access, ID, and refresh tokens</div>
+            <div class="api-endpoint-toggle">▼</div>
+          </div>
+          <div class="api-endpoint-body">
+            <div class="api-cols">
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.params">Parameters</h4>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td><td>App registration client ID</td></tr>
+                    <tr><td><code>grant_type</code></td><td class="api-required">✓</td><td>See grant types table below</td></tr>
+                    <tr><td><code>continuation_token</code></td><td class="api-required">✓</td><td>Current continuation token (most flows)</td></tr>
+                    <tr><td><code>scope</code></td><td class="api-required">✓</td><td><code>openid offline_access profile</code></td></tr>
+                    <tr><td><code>password</code></td><td></td><td>User's password (grant_type=password)</td></tr>
+                    <tr><td><code>oob</code></td><td></td><td>OTP code (grant_type=oob or mfa_oob)</td></tr>
+                    <tr><td><code>refresh_token</code></td><td></td><td>Existing refresh token (grant_type=refresh_token)</td></tr>
+                  </tbody>
+                </table>
+
+                <h4 class="api-param-heading">Grant Types</h4>
+                <table class="api-table">
+                  <thead><tr><th>grant_type</th><th>When to use</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>password</code></td><td>First-factor password authentication</td></tr>
+                    <tr><td><code>oob</code></td><td>First-factor email OTP authentication</td></tr>
+                    <tr><td><code>mfa_oob</code></td><td>MFA second factor (email OTP)</td></tr>
+                    <tr><td><code>continuation_token</code></td><td>Complete registration or pending flow</td></tr>
+                    <tr><td><code>attributes</code></td><td>Supply sign-up custom attributes</td></tr>
+                    <tr><td><code>refresh_token</code></td><td>Silent session renewal with stored token</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.response">Token Response</h4>
+                <table class="api-table">
+                  <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>access_token</code></td><td>JWT; use for API authorization</td></tr>
+                    <tr><td><code>id_token</code></td><td>JWT; user identity claims (<code>openid</code> scope required)</td></tr>
+                    <tr><td><code>refresh_token</code></td><td>Opaque; for session renewal (<code>offline_access</code> scope required)</td></tr>
+                    <tr><td><code>expires_in</code></td><td>Access token lifetime in seconds</td></tr>
+                    <tr><td><code>scope</code></td><td>Granted scopes</td></tr>
+                  </tbody>
+                </table>
+
+                <h4 class="api-param-heading">Conditional Responses</h4>
+                <table class="api-table">
+                  <thead><tr><th>Suberror</th><th>Meaning</th><th>Next step</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>mfa_required</code></td><td>MFA step required</td><td>Call /introspect then /challenge with method ID</td></tr>
+                    <tr><td><code>registration_required</code></td><td>Must enroll MFA method</td><td>Call /register/v1.0/introspect</td></tr>
+                    <tr><td><code>invalid_oob_value</code></td><td>Wrong OTP entered</td><td>Show error, allow retry</td></tr>
+                    <tr><td><code>password_too_weak</code></td><td>Password policy violation</td><td>Show policy requirements</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- introspect -->
+        <div class="api-endpoint-card" id="api-introspect">
+          <div class="api-endpoint-header" onclick="toggleApiCard('api-introspect')">
+            <div class="api-endpoint-method">POST</div>
+            <div class="api-endpoint-path">/oauth2/v2.0/introspect</div>
+            <div class="api-endpoint-summary" data-i18n="api.introspect.summary">Discover registered MFA methods for the user</div>
+            <div class="api-endpoint-toggle">▼</div>
+          </div>
+          <div class="api-endpoint-body">
+            <div class="api-cols">
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.params">Parameters</h4>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td><td>App registration client ID</td></tr>
+                    <tr><td><code>continuation_token</code></td><td class="api-required">✓</td><td>Token received after mfa_required suberror</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h4 class="api-param-heading" data-i18n="api.response">Response</h4>
+                <table class="api-table">
+                  <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>continuation_token</code></td><td>Fresh token to use in /challenge</td></tr>
+                    <tr><td><code>methods[]</code></td><td>Array of method objects</td></tr>
+                    <tr><td><code>methods[].id</code></td><td>Method ID to pass to /challenge as <code>id</code> param</td></tr>
+                    <tr><td><code>methods[].challenge_type</code></td><td>e.g. <code>oob</code></td></tr>
+                    <tr><td><code>methods[].challenge_channel</code></td><td>e.g. <code>email</code></td></tr>
+                    <tr><td><code>methods[].login_hint</code></td><td>Masked target for display</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- register group -->
+        <div class="api-endpoint-card" id="api-register">
+          <div class="api-endpoint-header" onclick="toggleApiCard('api-register')">
+            <div class="api-endpoint-method api-method-alt">POST ×3</div>
+            <div class="api-endpoint-path">/register/v1.0/{introspect · challenge · continue}</div>
+            <div class="api-endpoint-summary" data-i18n="api.register.summary">Enroll a strong authentication method during sign-up or first sign-in</div>
+            <div class="api-endpoint-toggle">▼</div>
+          </div>
+          <div class="api-endpoint-body">
+            <div class="api-cols">
+              <div>
+                <h4 class="api-param-heading">/register/v1.0/introspect</h4>
+                <p class="api-desc">Lists enrollable MFA methods. The continuation token comes from a <code>registration_required</code> response from <code>/oauth2/v2.0/token</code>.</p>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td></tr>
+                    <tr><td><code>continuation_token</code></td><td class="api-required">✓</td></tr>
+                  </tbody>
+                </table>
+
+                <h4 class="api-param-heading">/register/v1.0/challenge</h4>
+                <p class="api-desc">Send enrollment challenge OTP to the user's target.</p>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td></tr>
+                    <tr><td><code>continuation_token</code></td><td class="api-required">✓</td></tr>
+                    <tr><td><code>challenge_type</code></td><td class="api-required">✓</td></tr>
+                    <tr><td><code>challenge_target</code></td><td class="api-required">✓</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h4 class="api-param-heading">/register/v1.0/continue</h4>
+                <p class="api-desc">Submit the OTP to complete enrollment and return to the token flow.</p>
+                <table class="api-table">
+                  <thead><tr><th>Param</th><th>Required</th></tr></thead>
+                  <tbody>
+                    <tr><td><code>client_id</code></td><td class="api-required">✓</td></tr>
+                    <tr><td><code>continuation_token</code></td><td class="api-required">✓</td></tr>
+                    <tr><td><code>grant_type</code></td><td class="api-required">✓ (<code>oob</code>)</td></tr>
+                    <tr><td><code>oob</code></td><td></td></tr>
+                  </tbody>
+                </table>
+                <div class="api-note">
+                  <strong>Note:</strong> After successful /register/v1.0/continue, call <code>/oauth2/v2.0/token</code> again with <code>grant_type=continuation_token</code> to complete the full authentication and receive tokens.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Authentication Flows -->
+    <section class="home-section" id="docs-flows">
+      <div class="home-section-inner">
+        <h2 class="home-section-title" data-i18n="home.flowsTitle">Authentication Flows</h2>
+        <p class="home-section-lead" data-i18n="home.flowsLead">Each flow is a sequence of API calls connected by continuation tokens. Every step must receive and forward the latest token.</p>
+
+        <div class="flows-grid">
+
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-primary">Sign-In</div>
+              <h3 class="flow-card-title" data-i18n="flow.signin.title">Email + Password</h3>
+            </div>
+            <ol class="flow-steps">
+              <li><code>POST /initiate</code> — start sign-in, obtain continuation token</li>
+              <li><code>POST /challenge</code> — Entra selects authentication method</li>
+              <li><code>POST /token</code> with <code>grant_type=password</code> — verify credential</li>
+              <li>✓ Receive <code>access_token</code>, <code>id_token</code>, <code>refresh_token</code></li>
+            </ol>
+            <div class="flow-branch-note">If /token returns <code>mfa_required</code> → continue with MFA flow below.</div>
+          </div>
+
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-warning">MFA Extension</div>
+              <h3 class="flow-card-title" data-i18n="flow.mfa.title">Multi-Factor Authentication</h3>
+            </div>
+            <ol class="flow-steps">
+              <li>Triggered when /token returns <code>suberror=mfa_required</code></li>
+              <li><code>POST /introspect</code> — get list of enrolled MFA methods</li>
+              <li>User selects method from the returned list</li>
+              <li><code>POST /challenge</code> with selected method <code>id</code> — delivery OTP</li>
+              <li>User enters received OTP code</li>
+              <li><code>POST /token</code> with <code>grant_type=mfa_oob</code> + <code>oob</code> value</li>
+              <li>✓ Receive final token set</li>
+            </ol>
+          </div>
+
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-info">Registration</div>
+              <h3 class="flow-card-title" data-i18n="flow.registration.title">Strong Method Enrollment</h3>
+            </div>
+            <ol class="flow-steps">
+              <li>Triggered when /token returns <code>suberror=registration_required</code></li>
+              <li><code>POST /register/v1.0/introspect</code> — list enrollable methods</li>
+              <li>User selects method to enroll</li>
+              <li><code>POST /register/v1.0/challenge</code> — send enrollment OTP</li>
+              <li>User enters received OTP code</li>
+              <li><code>POST /register/v1.0/continue</code> with <code>grant_type=oob</code> + <code>oob</code> value</li>
+              <li><code>POST /token</code> with <code>grant_type=continuation_token</code> — finalize</li>
+              <li>✓ Receive token set</li>
+            </ol>
+          </div>
+
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-success">Renewal</div>
+              <h3 class="flow-card-title" data-i18n="flow.renewal.title">Session Renewal (Refresh Token)</h3>
+            </div>
+            <ol class="flow-steps">
+              <li>Store <code>refresh_token</code> from initial sign-in token response</li>
+              <li><code>POST /token</code> with <code>grant_type=refresh_token</code> + stored token</li>
+              <li>✓ Receive new <code>access_token</code>, <code>id_token</code>, and optionally a rotated <code>refresh_token</code></li>
+            </ol>
+            <div class="flow-branch-note">Refresh tokens expire or are revoked. Always handle failure and prompt re-authentication if renewal fails.</div>
+          </div>
+
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-danger">SSPR</div>
+              <h3 class="flow-card-title" data-i18n="flow.sspr.title">Self-Service Password Reset</h3>
+            </div>
+            <ol class="flow-steps">
+              <li><code>POST /resetpassword/v1.0/start</code> — initiate with <code>username</code></li>
+              <li><code>POST /resetpassword/v1.0/challenge</code> — deliver OTP</li>
+              <li>User enters OTP code</li>
+              <li><code>POST /resetpassword/v1.0/continue</code> — verify OTP</li>
+              <li><code>POST /resetpassword/v1.0/submit</code> — submit new password</li>
+              <li><code>GET /resetpassword/v1.0/poll_completion</code> — poll until success</li>
+              <li>✓ Password updated; prompt user to sign in</li>
+            </ol>
+          </div>
+
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-muted">Redirect Fallback</div>
+              <h3 class="flow-card-title" data-i18n="flow.redirect.title">Redirect Fallback</h3>
+            </div>
+            <ol class="flow-steps">
+              <li>Any endpoint may return <code>challenge_type=redirect</code></li>
+              <li>This is a <em>control response</em>, not a transport error</li>
+              <li>Your app must fall back to a hosted sign-in page (MSAL popup or redirect)</li>
+              <li>Always advertise <code>redirect</code> in your <code>challenge_type</code> list to satisfy API requirements</li>
+            </ol>
+            <div class="flow-branch-note">This demo handles redirect fallback by switching to MSAL popup or redirect flows.</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Concepts -->
+    <section class="home-section home-section-alt" id="docs-concepts">
+      <div class="home-section-inner">
+        <h2 class="home-section-title" data-i18n="home.conceptsTitle">Key Concepts</h2>
+        <div class="concepts-grid">
+          <div class="concept-card">
+            <h3 class="concept-card-title">🔗 Continuation Token</h3>
+            <p>An opaque, short-lived token that connects sequential API calls within the same flow. You must propagate the <em>most recent</em> continuation token to each subsequent request. Tokens are endpoint-sequence specific — using one out of order will fail.</p>
+          </div>
+          <div class="concept-card">
+            <h3 class="concept-card-title">🎯 Challenge Types</h3>
+            <p>Values that declare which authentication method is requested or supported. Always include <code>redirect</code> in your advertised list as a required fallback. Common values: <code>password</code>, <code>oob</code>, <code>redirect</code>.</p>
+          </div>
+          <div class="concept-card">
+            <h3 class="concept-card-title">🔏 Grant Types</h3>
+            <p>The credential mechanism used at the token endpoint. The correct grant type depends on flow stage: <code>password</code> for first-factor, <code>oob</code>/<code>mfa_oob</code> for OTP steps, <code>refresh_token</code> for renewal, <code>continuation_token</code> after registration.</p>
+          </div>
+          <div class="concept-card">
+            <h3 class="concept-card-title">📋 Error Contract</h3>
+            <p>All error responses include <code>error</code>, <code>error_description</code>, <code>suberror</code> (for branching), <code>trace_id</code>, and <code>correlation_id</code>. Always capture <code>trace_id</code> for support escalation. Treat <code>expired_token</code> as a signal to restart the flow.</p>
+          </div>
+          <div class="concept-card">
+            <h3 class="concept-card-title">🚦 Scopes</h3>
+            <p>Request <code>openid offline_access</code> as a minimum. Add <code>profile</code> for name/email claims in the ID token. Add Microsoft Graph scopes (e.g. <code>User.Read</code>) to authorize Graph API calls with the resulting access token.</p>
+          </div>
+          <div class="concept-card">
+            <h3 class="concept-card-title">🛡️ CORS Proxy</h3>
+            <p>Native Auth endpoints do not support browser CORS. A local forwarding proxy (<code>cors.js</code>, running on port 3001) transparently proxies all <code>/api/*</code> requests from the browser to the Entra endpoints during development.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Best Practices & Error Handling -->
+    <section class="home-section" id="docs-errors">
+      <div class="home-section-inner">
+        <h2 class="home-section-title" data-i18n="home.bestPracticesTitle">Best Practices &amp; Error Handling</h2>
+        <div class="best-practices-grid">
+          <div class="bp-card bp-card-do">
+            <div class="bp-label">✓ Do</div>
+            <ul class="bp-list">
+              <li>Always include <code>redirect</code> in <code>challenge_type</code> to comply with API requirements</li>
+              <li>Capture <code>trace_id</code> and <code>correlation_id</code> from every error response for support diagnostics</li>
+              <li>Handle <code>expired_token</code> by restarting the current flow from <code>/initiate</code></li>
+              <li>Implement bounded retry (max 3 attempts) for <code>invalid_oob_value</code></li>
+              <li>Treat <code>challenge_type=redirect</code> as a legitimate control path, not a failure</li>
+              <li>Store refresh tokens in <code>sessionStorage</code>, not <code>localStorage</code></li>
+              <li>Request <code>offline_access</code> scope at token step to receive a refresh token</li>
+            </ul>
+          </div>
+          <div class="bp-card bp-card-dont">
+            <div class="bp-label">✗ Don't</div>
+            <ul class="bp-list">
+              <li>Omit <code>redirect</code> from <code>challenge_type</code> — API may reject unsupported challenges</li>
+              <li>Reuse a continuation token after it has been consumed by a successful call</li>
+              <li>Assume a continuation token is valid after navigating away — restart if unsure</li>
+              <li>Retry <code>interaction_required</code> or <code>consent_required</code> errors silently — they require user action</li>
+              <li>Store credentials or tokens in plaintext files or source control</li>
+              <li>Call Native Auth endpoints directly from the browser without a CORS proxy in development</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 class="home-subsection-title" data-i18n="home.errorCodesTitle">Common Error Codes</h3>
+        <table class="api-table api-table-wide">
+          <thead>
+            <tr><th>error</th><th>suberror</th><th>Meaning</th><th>Recovery</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>invalid_grant</code></td><td><code>mfa_required</code></td><td>MFA second factor required</td><td>Call /introspect, then /challenge with method ID</td></tr>
+            <tr><td><code>invalid_grant</code></td><td><code>registration_required</code></td><td>User must enroll MFA method</td><td>Start /register/v1.0 flow</td></tr>
+            <tr><td><code>invalid_grant</code></td><td><code>invalid_oob_value</code></td><td>Wrong OTP entered</td><td>Show error, allow bounded retry</td></tr>
+            <tr><td><code>invalid_grant</code></td><td><code>password_too_weak</code></td><td>Password fails policy</td><td>Show policy requirements</td></tr>
+            <tr><td><code>invalid_grant</code></td><td><code>expired_token</code></td><td>Continuation token expired</td><td>Restart flow from /initiate</td></tr>
+            <tr><td><code>invalid_client</code></td><td><code>nativeauthapi_disabled</code></td><td>Native Auth not enabled</td><td>Enable in Entra portal tenant settings</td></tr>
+            <tr><td><code>user_not_found</code></td><td>—</td><td>No account with that username</td><td>Check username, offer sign-up</td></tr>
+            <tr><td><code>unauthorized_client</code></td><td>—</td><td>App not configured for this flow</td><td>Check app registration in Entra portal</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Footer CTA -->
+    <section class="home-cta">
+      <div class="home-cta-inner">
+        <h2 class="home-cta-title" data-i18n="home.ctaTitle">Ready to explore the flows end-to-end?</h2>
+        <p class="home-cta-subtitle" data-i18n="home.ctaSubtitle">Sign in with this demo or use the Postman collection to test each Native Auth endpoint step by step.</p>
+        <div class="home-cta-buttons">
+          <button type="button" class="btn-home-primary" onclick="showLoginPage()" data-i18n="home.tryLive">Try it live →</button>
+          <a href="EEID%20Native%20Auth.postman_collection.json" download class="btn-home-secondary" data-i18n="home.downloadPostman">Download Postman Collection</a>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /#homeDiv -->
+
   <!-- MFA method selection dialog -->
   <dialog id="mfaMethodDialog" class="mfa-dialog">
     <form method="dialog" class="mfa-dialog-inner">
@@ -111,16 +674,6 @@
       <span class="azure-shell-product">CodexJay External ID</span>
       <div class="azure-shell-actions">
         <span class="azure-shell-meta">Entra-style sign-in experience</span>
-        <label class="demo-mode-toggle">
-          <input id="demoModeToggle" type="checkbox" onchange="setDemoMode(this.checked)">
-          <span data-i18n="demo.toggle">Demo mode</span>
-        </label>
-        <label class="theme-label" for="themeSelect" data-i18n="theme.label">Theme</label>
-        <select id="themeSelect" class="theme-select" aria-label="Theme selector">
-          <option value="azure-portal" data-i18n="theme.azurePortal">Azure Portal</option>
-          <option value="enterprise-blue" data-i18n="theme.enterpriseBlue">Enterprise Blue</option>
-          <option value="fintech-slate" data-i18n="theme.fintechSlate">Fintech Slate</option>
-        </select>
       </div>
     </div>
     <div class="box-inner login-shell">

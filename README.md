@@ -27,6 +27,7 @@ It also demonstrates self-service sign-up, self-service password reset, MFA chal
 - [Graph Client Split](#graph-client-split)
 - [Startup Script Deep Dive](#startup-script-deep-dive)
 - [Repository Deep Dive](#repository-deep-dive)
+- [Token Refresh Strategy](#token-refresh-strategy)
 - [Session Behavior](#session-behavior)
 - [Security Notes](#security-notes)
 - [Customizing For A New Client](#customizing-for-a-new-client)
@@ -686,6 +687,115 @@ Logout behavior:
 3. Optionally set `PROXY_TARGET` if your endpoint is custom
 4. Run `npm run start:env` and `npm run cors:env`
 5. (Optional) adjust branding copy/theme in `public/index.html` and `public/app.css`
+
+## Token Refresh Strategy
+
+This demo implements automatic token renewal to maintain session continuity during operator demos and extended user interactions. Different renewal strategies apply depending on the authentication path.
+
+### MSAL Session Renewal (Automatic Silent Refresh)
+
+**Strategy:** Scheduled silent refresh with exponential backoff retry logic
+
+**How it works:**
+
+1. **Scheduler**: On successful MSAL login, the app automatically schedules the next silent refresh 5 minutes before token expiry.
+2. **Automatic renewal**: At the scheduled time, the app calls `msalInstance.acquireTokenSilent()` without user interaction, acquiring a new access token using the cached account.
+3. **Reschedule on success**: After a successful silent refresh, the next refresh is automatically rescheduled 5 minutes before the new token's expiry.
+4. **Page restore**: If the user reloads the page, the app detects the cached MSAL account and attempts a silent refresh before presenting the login UI. This ensures uninterrupted operator narratives across page reloads.
+
+**Error handling & retry:**
+
+- If silent refresh fails with a **transient error** (network timeout, connection refused, etc.), the app automatically retries with exponential backoff (1s, 2s, 4s) up to 3 times before falling back to the token critical-window banner.
+- If silent refresh fails with a **permanent error** (interaction required, consent required), the banner immediately offers manual refresh or re-auth options.
+- All errors are logged with diagnostic information (error code, message, endpoint) for operator troubleshooting.
+
+**Token guidance banner:**
+
+- When a token enters the critical window (≤ 5 minutes remaining) and silent refresh is unavailable or has failed, a banner appears offering "Refresh session" (manual silent refresh) or "Sign in again" (re-auth) actions.
+
+**Indicator telemetry:**
+
+- The **Refresh Schedule Indicator** in the token panel displays:
+  - **Mode**: "MSAL silent refresh"
+  - **Last refresh**: Timestamp and source (scheduled, manual, or session restore)
+  - **Next refresh**: Scheduled timestamp with live countdown timer (updates every 1 second)
+
+**Operator demo benefits:**
+
+- Tokens never expire during a live demo without the operator explicitly triggering re-auth
+- Countdown timer shows when next automatic renewal will occur, demonstrating the scheduled approach
+- If silent refresh fails, the banner explains fallback logic and offers manual recovery
+
+### Native Auth Session Renewal (On-Demand Refresh Token Grant)
+
+**Strategy:** Manual refresh via `refresh_token` grant type (no scheduled automation)
+
+**How it works:**
+
+1. **Token storage**: On successful email/password login, the app stores the issued `refresh_token` in sessionStorage.
+2. **Manual refresh action**: When the user (or operator) clicks the "Refresh session" button in the token critical-window banner, the app posts a `refresh_token` grant request to `/oauth2/v2.0/token` with the stored refresh token.
+3. **Token update**: On success, the app stores the new access token, ID token, and (if issued) a new refresh token, then re-renders the token panel.
+4. **Session recovery**: Unlike MSAL, the app does not automatically restore a Native Auth session on page reload (refresh tokens are opaque and cannot be silently revalidated in-browser without a network call). The user must sign in again if the page reloads.
+
+**Error handling:**
+
+- If refresh fails, the banner offers a "Sign in again" button to initiate re-authentication.
+- If no refresh token was issued by the tenant, the banner informs the operator that refresh is unavailable and manual re-auth is required.
+
+**Token guidance banner:**
+
+- Native Auth tokens show context-aware copy: "Token is in the critical window. A refresh token is present; reauthenticate or refresh soon to avoid interruption."
+- Action buttons: "Refresh session" (if refresh token available) and "Sign in again".
+
+**Indicator telemetry:**
+
+- The **Refresh Schedule Indicator** in the token panel displays:
+  - **Mode**: "Native Auth refresh token"
+  - **Last refresh**: Timestamp and source (manual refresh or session restore on initial login)
+  - **Next refresh**: "On-demand (manual refresh)" — no scheduled time since Native Auth uses on-demand refresh
+
+**Operator demo benefits:**
+
+- Demonstrates how to manually extend Native Auth sessions using refresh tokens
+- Clearly shows when refresh is unavailable (no refresh token issued by tenant)
+- Helps explain the difference between automatic (MSAL) and manual (Native Auth) renewal strategies
+
+### Refresh Source Tags
+
+The refresh indicator appends the refresh source to the "Last refresh" timestamp:
+
+- **scheduled** — renewal triggered by the MSAL scheduler before token expiry
+- **manual** — renewal triggered by the user clicking "Refresh session"
+- **session restore** — initial session setup after login or page restore
+
+This helps operators understand the chain of events and explain session lifecycle to learners.
+
+### Testing Token Renewal
+
+**To test MSAL silent refresh:**
+
+1. Sign in with MSAL (popup or redirect).
+2. Observe the "Refresh Schedule Indicator" showing mode "MSAL silent refresh" and a countdown in "Next refresh".
+3. Wait 5 minutes (or adjust token lifetime in your tenant config to expire sooner).
+4. Watch the indicator countdown reach zero and the "Last refresh" timestamp update with source "scheduled".
+5. Check browser console (F12) for `"Scheduled MSAL silent refresh completed successfully"` message.
+
+**To test Native Auth manual refresh:**
+
+1. Sign in with Native Auth (email/password).
+2. Observe the "Refresh Schedule Indicator" showing mode "Native Auth refresh token" and "Next refresh: On-demand (manual refresh)".
+3. Navigate to the token panel and observe token expiry times.
+4. When a token reaches critical window (≤ 5 minutes remaining), the banner appears with "Refresh session" button.
+5. Click "Refresh session" and observe the "Last refresh" timestamp update with source "manual".
+6. Console logs show `POST /oauth2/v2.0/token` with `grant_type=refresh_token`.
+
+**To test refresh failure recovery:**
+
+1. Sign in with MSAL.
+2. Disable your network (F12 DevTools Network tab, offline mode).
+3. Wait for the scheduled refresh to attempt (observe "refreshing" state in token guidance banner).
+4. Observe the banner transition to "failed" and offer manual "Refresh session" button.
+5. Re-enable network and click "Refresh session" to complete manual recovery.
 
 ## License
 

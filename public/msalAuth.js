@@ -15,6 +15,10 @@ const MSAL_SILENT_REFRESH = {
     inFlight: null,
     status: "idle",
     lastError: null,
+    retryCount: 0,
+    lastRetryAt: null,
+    maxRetries: 3,
+    baseRetryDelayMs: 1000,
 };
 
 function setMsalSilentRefreshState(status, error) {
@@ -53,6 +57,7 @@ async function acquireMsalTokenSilent(account, options = {}) {
 
 function scheduleMsalSilentRefresh(accessToken, account) {
     clearMsalSilentRefreshTimer();
+    MSAL_SILENT_REFRESH.retryCount = 0;
     if (!accessToken || typeof parseJwt !== "function") return;
 
     let decoded;
@@ -71,6 +76,7 @@ function scheduleMsalSilentRefresh(accessToken, account) {
             mode: "msal",
             strategy: "silent",
             nextRefreshAt,
+            refreshSource: "scheduled",
         });
     }
     MSAL_SILENT_REFRESH.timerId = window.setTimeout(() => {
@@ -109,6 +115,9 @@ async function refreshMsalSessionSilently(options = {}) {
         return MSAL_SILENT_REFRESH.inFlight;
     }
 
+    // Determine refresh source based on reason
+    const refreshSource = options.reason === "scheduled" ? "scheduled" : "manual";
+
     setMsalSilentRefreshState("refreshing");
     MSAL_SILENT_REFRESH.inFlight = (async () => {
         try {
@@ -119,12 +128,35 @@ async function refreshMsalSessionSilently(options = {}) {
                     mode: "msal",
                     strategy: "silent",
                     lastRefreshAt: Date.now(),
+                    refreshSource,
                 });
             }
+            // Reset retry counter on success
+            MSAL_SILENT_REFRESH.retryCount = 0;
             setMsalSilentRefreshState("idle");
             setLoginNotice("info", tr("msg.msalSilentRefreshSuccess"));
             return tokenResponse;
         } catch (error) {
+            // Retry logic: exponential backoff for transient errors
+            const shouldRetry = MSAL_SILENT_REFRESH.retryCount < MSAL_SILENT_REFRESH.maxRetries
+                && options.reason === "scheduled"
+                && isTransientError(error);
+
+            if (shouldRetry) {
+                MSAL_SILENT_REFRESH.retryCount++;
+                MSAL_SILENT_REFRESH.lastRetryAt = Date.now();
+                const backoffMs = MSAL_SILENT_REFRESH.baseRetryDelayMs * Math.pow(2, MSAL_SILENT_REFRESH.retryCount - 1);
+                console.warn(`MSAL silent refresh failed (attempt ${MSAL_SILENT_REFRESH.retryCount}), retrying in ${backoffMs}ms:`, error);
+                
+                MSAL_SILENT_REFRESH.inFlight = null;
+                return new Promise((resolve, reject) => {
+                    setTimeout(() => {
+                        refreshMsalSessionSilently(options).then(resolve).catch(reject);
+                    }, backoffMs);
+                });
+            }
+
+            // Permanent failure after retries exhausted
             setMsalSilentRefreshState("failed", error);
             if (options.reportError !== false && typeof window.showErrorDiagnostics === "function") {
                 window.showErrorDiagnostics({
@@ -144,6 +176,23 @@ async function refreshMsalSessionSilently(options = {}) {
     })();
 
     return MSAL_SILENT_REFRESH.inFlight;
+}
+
+function isTransientError(error) {
+    if (!error) return false;
+    const message = String(error?.message || error).toLowerCase();
+    const code = String(error?.errorCode || error?.code || "").toLowerCase();
+    
+    // Network/timeout errors are transient
+    if (message.includes("network") || message.includes("timeout") || message.includes("econnrefused")) return true;
+    if (code.includes("timeout") || code.includes("enotfound") || code.includes("econnrefused")) return true;
+    
+    // Specific MSAL transient errors
+    if (code.includes("invalid_grant") && message.includes("expired")) return true;
+    if (code === "interaction_required") return false; // Not transient - requires user interaction
+    if (code === "consent_required") return false; // Not transient - requires user consent
+    
+    return false;
 }
 
 window.refreshMsalSessionSilently = refreshMsalSessionSilently;

@@ -37,6 +37,7 @@ async function refreshNativeAuthSession() {
                 strategy: "on-demand",
                 lastRefreshAt: Date.now(),
                 nextRefreshAt: null,
+                refreshSource: "manual",
             });
         }
         setLoginNotice("info", tr("msg.nativeRefreshSuccess"));

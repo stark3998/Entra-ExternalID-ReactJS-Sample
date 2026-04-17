@@ -46,6 +46,7 @@ const REFRESH_SCHEDULE_STATE = {
     strategy: "",
     lastRefreshAt: null,
     nextRefreshAt: null,
+    refreshSource: "", // "scheduled", "manual", "restore"
 };
 
 function tr(key, params) {
@@ -267,9 +268,15 @@ function renderRefreshScheduleIndicator() {
         ? tr("auth.refreshModeMsal")
         : tr("auth.refreshModeNative");
 
-    const lastRefreshText = REFRESH_SCHEDULE_STATE.lastRefreshAt
+    let lastRefreshText = REFRESH_SCHEDULE_STATE.lastRefreshAt
         ? formatRefreshTimestamp(REFRESH_SCHEDULE_STATE.lastRefreshAt)
         : tr("auth.refreshNever");
+    
+    // Append refresh source suffix
+    if (REFRESH_SCHEDULE_STATE.lastRefreshAt && REFRESH_SCHEDULE_STATE.refreshSource) {
+        const sourceLabel = tr(`auth.refreshSource${REFRESH_SCHEDULE_STATE.refreshSource.charAt(0).toUpperCase() + REFRESH_SCHEDULE_STATE.refreshSource.slice(1)}`);
+        lastRefreshText += ` (${sourceLabel})`;
+    }
 
     let nextRefreshText = tr("auth.refreshNotScheduled");
     if (REFRESH_SCHEDULE_STATE.mode === "native") {
@@ -293,7 +300,7 @@ function renderRefreshScheduleIndicator() {
 }
 
 function setRefreshScheduleIndicator(updates = {}) {
-    ["mode", "strategy", "lastRefreshAt", "nextRefreshAt"].forEach((key) => {
+    ["mode", "strategy", "lastRefreshAt", "nextRefreshAt", "refreshSource"].forEach((key) => {
         if (Object.prototype.hasOwnProperty.call(updates, key)) {
             REFRESH_SCHEDULE_STATE[key] = updates[key];
         }
@@ -306,6 +313,7 @@ function clearRefreshScheduleIndicator() {
     REFRESH_SCHEDULE_STATE.strategy = "";
     REFRESH_SCHEDULE_STATE.lastRefreshAt = null;
     REFRESH_SCHEDULE_STATE.nextRefreshAt = null;
+    REFRESH_SCHEDULE_STATE.refreshSource = "";
     renderRefreshScheduleIndicator();
 }
 
@@ -1019,7 +1027,7 @@ function renderNativeAuthenticatedUI(tokenResponse) {
         storeSessionTokens(tokenResponse);
     }
     setSessionInteractionType("native");
-    setRefreshScheduleIndicator({ mode: "native", strategy: "on-demand", nextRefreshAt: null });
+    setRefreshScheduleIndicator({ mode: "native", strategy: "on-demand", nextRefreshAt: null, refreshSource: "restore" });
 
     const decodedToken = parseJwt(accessToken);
     const idToken = typeof tokenResponse === "object" ? tokenResponse.id_token : null;
@@ -1031,6 +1039,9 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     console.log("Decoded token payload:", decodedToken);
     document.getElementById("authenticatedDiv").style.display = "block";
     document.getElementById("loginDiv").style.display = "none";
+    const _homeNative = document.getElementById("homeDiv"); if (_homeNative) _homeNative.style.display = "none";
+    _setNavActive("");
+    const _signInNative = document.getElementById("navSignInBtn"); if (_signInNative) _signInNative.style.display = "none";
     const familyName = (decodedIdToken && decodedIdToken.family_name) || decodedToken.family_name || "";
     const givenName = (decodedIdToken && decodedIdToken.given_name) || decodedToken.given_name || "";
     const uniqueName =
@@ -1067,6 +1078,9 @@ function renderAuthenticatedUI(authResult) {
     const account = authResult && authResult.account ? authResult.account : authResult;
     document.getElementById("authenticatedDiv").style.display = "block";
     document.getElementById("loginDiv").style.display = "none";
+    const _homeMsal = document.getElementById("homeDiv"); if (_homeMsal) _homeMsal.style.display = "none";
+    _setNavActive("");
+    const _signInMsal = document.getElementById("navSignInBtn"); if (_signInMsal) _signInMsal.style.display = "none";
     document.getElementById("firstName").innerText = (account && account.name) || tr("misc.user");
 
     const idTokenClaims = (authResult && authResult.idTokenClaims) || (account && account.idTokenClaims) || {};
@@ -1096,14 +1110,81 @@ function renderAuthenticatedUI(authResult) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// View management: home / login / authenticated
+// ---------------------------------------------------------------------------
+function showHomePage() {
+    const homeDiv = document.getElementById("homeDiv");
+    const loginDiv = document.getElementById("loginDiv");
+    const authDiv  = document.getElementById("authenticatedDiv");
+    if (homeDiv)  homeDiv.style.display    = "block";
+    if (loginDiv) loginDiv.style.display   = "none";
+    if (authDiv)  authDiv.style.display    = "none";
+    _setNavActive("home");
+    // Show/hide Sign In button
+    const signInBtn = document.getElementById("navSignInBtn");
+    if (signInBtn) signInBtn.style.display = "inline-block";
+}
+
+function showLoginPage() {
+    const homeDiv = document.getElementById("homeDiv");
+    const loginDiv = document.getElementById("loginDiv");
+    const authDiv  = document.getElementById("authenticatedDiv");
+    if (homeDiv)  homeDiv.style.display    = "none";
+    if (loginDiv) loginDiv.style.display   = "block";
+    if (authDiv)  authDiv.style.display    = "none";
+    _setNavActive("login");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function scrollToDocsSection() {
+    const homeDiv = document.getElementById("homeDiv");
+    if (!homeDiv || homeDiv.style.display === "none") {
+        showHomePage();
+        setTimeout(() => {
+            const target = document.getElementById("docs-overview");
+            if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+    } else {
+        const target = document.getElementById("docs-overview");
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    _setNavActive("docs");
+}
+
+function toggleNavMenu() {
+    const menu = document.getElementById("navMobileMenu");
+    const btn  = document.getElementById("navHamburger");
+    if (!menu) return;
+    const isHidden = menu.classList.contains("is-hidden");
+    menu.classList.toggle("is-hidden", !isHidden);
+    if (btn) btn.setAttribute("aria-expanded", String(isHidden));
+}
+
+function toggleApiCard(id) {
+    const card = document.getElementById(id);
+    if (card) card.classList.toggle("is-open");
+}
+
+function _setNavActive(section) {
+    document.querySelectorAll(".navbar-link").forEach(link => {
+        link.classList.toggle("is-active", link.getAttribute("data-nav") === section);
+    });
+}
+
 function renderUnauthenticatedUI() {
     clearTokenLifetimeTimers();
     clearRefreshScheduleIndicator();
     document.getElementById("authenticatedDiv").style.display = "none";
     document.getElementById("loginDiv").style.display = "block";
+    const homeDiv = document.getElementById("homeDiv");
+    if (homeDiv) homeDiv.style.display = "none";
     document.getElementById("firstName").innerText = "";
     renderOperatorSearchHistory();
     applyDemoModeState();
+    _setNavActive("login");
+    const signInBtn = document.getElementById("navSignInBtn");
+    if (signInBtn) signInBtn.style.display = "none";
 }
 
 // ---------------------------------------------------------------------------
@@ -1123,6 +1204,9 @@ function restoreSession() {
         }
         document.getElementById("authenticatedDiv").style.display = "block";
         document.getElementById("loginDiv").style.display = "none";
+        const _homeRestore = document.getElementById("homeDiv"); if (_homeRestore) _homeRestore.style.display = "none";
+        _setNavActive("");
+        const _signInRestore = document.getElementById("navSignInBtn"); if (_signInRestore) _signInRestore.style.display = "none";
         document.getElementById("firstName").innerText = decodedToken.name || "User";
         displayTokenDetails(tokens);
         applyDemoModeState();
@@ -1135,6 +1219,9 @@ function restoreSession() {
         enrichProfileWithGraphSelfService(tokens.access_token, tokens.id_token ? parseJwt(tokens.id_token) : {});
         refreshOperatorInsights(tokens.access_token, tokens.id_token ? parseJwt(tokens.id_token) : {});
         console.log("Session restored for:", decodedToken.name);
+    } else {
+        // No active session: show homepage as default landing view
+        showHomePage();
     }
 }
 
