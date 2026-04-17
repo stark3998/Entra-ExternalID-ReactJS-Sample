@@ -13,6 +13,7 @@ It also demonstrates MFA challenges and MFA method registration where supported 
 ## Index
 
 - [Native Auth Flow Deep Dive](#native-auth-flow-deep-dive)
+- [Postman Collection Deep Dive](#postman-collection-deep-dive)
 - [What This Demo Is For](#what-this-demo-is-for)
 - [What This Demo Is Not For](#what-this-demo-is-not-for)
 - [Architecture Overview](#architecture-overview)
@@ -198,6 +199,115 @@ The Microsoft reference also documents:
 This repo currently focuses on native sign-in, MFA, and strong method
 registration. If you extend this sample to sign-up or SSPR, follow the same
 continuation-token and redirect-fallback patterns documented in the reference.
+
+## Postman Collection Deep Dive
+
+Collection file:
+
+- [public/EEID Native Auth.postman_collection.json](public/EEID%20Native%20Auth.postman_collection.json)
+
+This collection provides a manual, request-by-request Native Auth test harness
+for email/password sign-in and MFA completion against Entra External ID
+endpoints.
+
+### Purpose and Scope
+
+- Exercises direct Native Auth endpoints from Postman.
+- Validates continuation token progression between calls.
+- Covers both first-factor sign-in and second-factor MFA token exchange.
+- Uses collection variables so operators can run the same flow across tenants.
+
+Note:
+
+- The browser app in this repo uses a local proxy because Native Auth endpoints
+  don't support browser CORS.
+- Postman calls are not browser-origin constrained in the same way, so this
+  collection targets tenant endpoints directly.
+
+### Variables Used
+
+Required setup variables:
+
+- `tenant_name`: tenant subdomain used in `https://{tenant_name}.ciamlogin.com`.
+- `tenant_id`: tenant path segment used in endpoint URLs.
+- `client_id_new`: app registration client ID.
+- `username`: customer user email/username for sign-in.
+- `password`: first-factor password (email/password flow).
+
+Flow state variables:
+
+- `continuation_token`: updated after most requests by collection test scripts.
+- `mfa_challenge_id`: selected method `id` from introspect result for MFA challenge.
+
+### Request Sequence and Behavior
+
+1. `Signin - Initiate`
+
+- Endpoint: `/oauth2/v2.0/initiate`
+- Sends: `client_id`, `challenge_type=password oob redirect`, `username`, capabilities.
+- On success test script stores `continuation_token`.
+
+1. `SignIn - Challenge`
+
+- Endpoint: `/oauth2/v2.0/challenge`
+- Sends: `client_id`, `challenge_type`, capabilities, `continuation_token`.
+- Selects required method and returns next continuation token.
+
+1. `SignIn - Token`
+
+- Endpoint: `/oauth2/v2.0/token`
+- Sends: `grant_type=password`, `password`, `scope=openid offline_access`, plus continuation token.
+- Successful path returns security tokens.
+- Conditional path can return `mfa_required` or `registration_required`.
+
+1. `SignIn - Intrsopect` (collection item name contains this typo)
+
+- Endpoint: `/oauth2/v2.0/introspect`
+- Sends: `client_id`, `continuation_token`.
+- Returns registered strong-auth methods and a fresh continuation token.
+
+1. `SignIn - Challenge with MFA`
+
+- Endpoint: `/oauth2/v2.0/challenge`
+- Sends: `client_id`, `continuation_token`, `id={{mfa_challenge_id}}`.
+- Triggers delivery of MFA out-of-band challenge code.
+
+1. `SignIn - Token with MFA`
+
+- Endpoint: `/oauth2/v2.0/token`
+- Sends: `grant_type=mfa_oob`, `oob=<otp>`, `scope=openid offline_access`, continuation token.
+- On success returns final token set.
+
+### Built-In Test Scripts in the Collection
+
+Most requests include a simple test script that reads JSON response and sets:
+
+- `pm.collectionVariables.set("continuation_token", jsonData.continuation_token)`
+
+Operational implication:
+
+- Run requests in order so `continuation_token` is always current.
+- If a request fails with token-related errors, restart from initiate.
+
+### Operator Runbook
+
+1. Populate required variables in the collection.
+2. Run `Signin - Initiate`.
+3. Run `SignIn - Challenge`.
+4. Run `SignIn - Token`.
+5. If response indicates MFA is required, run `SignIn - Intrsopect`.
+6. Set `mfa_challenge_id` from the chosen method ID in introspect response.
+7. Run `SignIn - Challenge with MFA`.
+8. Enter the received OTP into the `oob` field in `SignIn - Token with MFA`.
+9. Run `SignIn - Token with MFA`.
+
+### Important Notes and Safety
+
+- Include `redirect` in `challenge_type` to stay aligned with API requirements.
+- Capture and retain `trace_id` and `correlation_id` from error responses.
+- Avoid storing real secrets/tokens in exported collection files.
+- The `SignIn - Token with MFA` request currently contains sample disabled fields
+  for refresh token experimentation; keep them disabled unless explicitly needed.
 
 ## What This Demo Is For
 
