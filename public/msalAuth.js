@@ -11,11 +11,31 @@ function tr(key, params) {
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
-function handleResponse(resp) {
+async function handleResponse(resp) {
     if (resp !== null) {
         accountId = resp.account.homeAccountId;
         msalInstance.setActiveAccount(resp.account);
-        renderAuthenticatedUI(resp.account);
+        if (typeof window.applyLocaleFromClaims === "function") {
+            window.applyLocaleFromClaims(resp.idTokenClaims || resp.account?.idTokenClaims);
+        }
+
+        let accessToken = "";
+        try {
+            const tokenResponse = await msalInstance.acquireTokenSilent({
+                scopes: loginRequest.scopes,
+                account: resp.account,
+            });
+            accessToken = tokenResponse && tokenResponse.accessToken ? tokenResponse.accessToken : "";
+        } catch (tokenErr) {
+            console.warn("Could not acquire MSAL access token for profile display:", tokenErr);
+        }
+
+        renderAuthenticatedUI({
+            account: resp.account,
+            idTokenClaims: resp.idTokenClaims || resp.account?.idTokenClaims || {},
+            idToken: resp.idToken || "",
+            accessToken,
+        });
     }
 }
 
@@ -34,7 +54,7 @@ async function loginPopup() {
             loginRequest,
             redirectUri: msalConfig.auth.redirectUri + "/redirect.html",
         });
-        handleResponse(loginResponse);
+        await handleResponse(loginResponse);
     } catch (error) {
         renderUnauthenticatedUI();
         const message = error?.message || String(error);

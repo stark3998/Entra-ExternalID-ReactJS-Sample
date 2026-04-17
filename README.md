@@ -500,6 +500,7 @@ This gives deterministic local behavior for demos and reduces mistakes from forg
 UI text is centralized in `public/i18n.js` and loaded at runtime.
 
 - Default locale comes from `LOCALE` in `.env`
+- On successful login, the app attempts to read locale claims from Entra tokens (`preferred_language`, `locale`, `ui_locales`) and applies them dynamically
 - Users can switch locale at runtime via `setLocale('en')` or `setLocale('es')` in the browser console
 - Add new languages by extending the `translations` object in `public/i18n.js`
 

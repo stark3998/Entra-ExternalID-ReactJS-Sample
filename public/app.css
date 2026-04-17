@@ -710,6 +710,42 @@ body::before,
   color: var(--ink-900);
 }
 
+.profile-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.profile-chip {
+  border: 1px solid var(--line-200);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.profile-chip-label {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-500);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.profile-chip-value {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-900);
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.profile-chip-value.is-locale {
+  color: #005a9e;
+}
+
 .token-card {
   margin-bottom: 12px;
   border: 1px solid var(--line-200);

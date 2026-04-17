@@ -34,6 +34,120 @@ function tr(key, params) {
     return key;
 }
 
+function getLocaleFromClaims(claims) {
+    if (!claims || typeof claims !== "object") return null;
+
+    const rawCandidates = [
+        claims.preferred_language,
+        claims.locale,
+        claims.ui_locales,
+        claims.lang,
+        claims.language,
+        claims.extension_locale,
+    ];
+
+    for (const value of rawCandidates) {
+        if (typeof value !== "string") continue;
+        const normalized = value.trim();
+        if (!normalized) continue;
+        // ui_locales can be a space-delimited list; prefer the first locale.
+        return normalized.split(/\s+/)[0];
+    }
+
+    return null;
+}
+
+function applyLocaleFromClaims(claims) {
+    const locale = getLocaleFromClaims(claims);
+    if (!locale || typeof window.setLocale !== "function") return;
+
+    window.setLocale(locale);
+}
+
+window.applyLocaleFromClaims = applyLocaleFromClaims;
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function getPreferredClaim(claims, keys) {
+    for (const key of keys) {
+        const value = claims && claims[key];
+        if (value !== null && value !== undefined && value !== "") return value;
+    }
+    return "";
+}
+
+function renderComprehensiveUserProfile(context) {
+    const profileDiv = document.getElementById("userProfileDiv");
+    const highlights = document.getElementById("userProfileHighlights");
+    const claimsBody = document.getElementById("profileClaimsBody");
+    if (!profileDiv || !highlights || !claimsBody) return;
+
+    const accessToken = context && context.accessToken;
+    const idToken = context && context.idToken;
+    const accountClaims = (context && context.accountClaims) || {};
+
+    let accessClaims = {};
+    let idClaims = {};
+    try {
+        accessClaims = accessToken ? parseJwt(accessToken) : {};
+    } catch (_err) {
+        accessClaims = {};
+    }
+    try {
+        idClaims = idToken ? parseJwt(idToken) : {};
+    } catch (_err) {
+        idClaims = {};
+    }
+    const mergedClaims = {
+        ...accountClaims,
+        ...accessClaims,
+        ...idClaims,
+    };
+
+    const locale = getLocaleFromClaims(mergedClaims) || (typeof window.getLocale === "function" ? window.getLocale() : "en");
+
+    const userSummary = [
+        { label: "Display Name", value: getPreferredClaim(mergedClaims, ["name", "displayName"]) || tr("misc.user") },
+        { label: "Given Name", value: getPreferredClaim(mergedClaims, ["given_name"]) || "-" },
+        { label: "Family Name", value: getPreferredClaim(mergedClaims, ["family_name"]) || "-" },
+        { label: "Username", value: getPreferredClaim(mergedClaims, ["preferred_username", "unique_name", "upn", "email"]) || "-" },
+        { label: tr("auth.locale"), value: locale || "-", locale: true },
+        { label: "Tenant ID", value: getPreferredClaim(mergedClaims, ["tid", "tenantId"]) || "-" },
+        { label: "Object ID", value: getPreferredClaim(mergedClaims, ["oid", "sub"]) || "-" },
+        { label: "Authentication Method", value: getPreferredClaim(mergedClaims, ["amr", "acr"]) || "-" },
+    ];
+
+    highlights.innerHTML = userSummary.map((item) => {
+        const value = Array.isArray(item.value) ? item.value.join(", ") : String(item.value);
+        const valueClass = item.locale ? "profile-chip-value is-locale" : "profile-chip-value";
+        return (
+            `<div class="profile-chip">` +
+            `<span class="profile-chip-label">${escapeHtml(item.label)}</span>` +
+            `<span class="${valueClass}">${escapeHtml(value)}</span>` +
+            `</div>`
+        );
+    }).join("");
+
+    claimsBody.textContent = JSON.stringify(
+        {
+            locale,
+            id_token_claims: idClaims,
+            access_token_claims: accessClaims,
+            account_claims: accountClaims,
+            merged_claims: mergedClaims,
+        },
+        null,
+        2
+    );
+
+    profileDiv.style.display = "block";
+}
+
 function storeSessionTokens(tokenResponse) {
     if (tokenResponse.access_token) sessionStorage.setItem(SESSION_KEYS.ACCESS_TOKEN, tokenResponse.access_token);
     if (tokenResponse.id_token) sessionStorage.setItem(SESSION_KEYS.ID_TOKEN, tokenResponse.id_token);
@@ -70,10 +184,24 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     }
 
     const decodedToken = parseJwt(accessToken);
-    console.log("Decoded ID Token:", decodedToken);
+    const idToken = typeof tokenResponse === "object" ? tokenResponse.id_token : null;
+    const decodedIdToken = idToken ? parseJwt(idToken) : null;
+
+    applyLocaleFromClaims(decodedIdToken || decodedToken);
+
+    console.log("Decoded token payload:", decodedToken);
     document.getElementById("authenticatedDiv").style.display = "block";
     document.getElementById("loginDiv").style.display = "none";
-    document.getElementById("firstName").innerText = decodedToken.family_name + ', ' + decodedToken.given_name + ' [' + (decodedToken.unique_name || "User") + ']';
+    const familyName = (decodedIdToken && decodedIdToken.family_name) || decodedToken.family_name || "";
+    const givenName = (decodedIdToken && decodedIdToken.given_name) || decodedToken.given_name || "";
+    const uniqueName =
+        (decodedIdToken && (decodedIdToken.unique_name || decodedIdToken.preferred_username || decodedIdToken.email)) ||
+        decodedToken.unique_name ||
+        decodedToken.preferred_username ||
+        decodedToken.email ||
+        "User";
+    const displayName = `${familyName}, ${givenName}`.replace(/^\s*,\s*$/, "").trim();
+    document.getElementById("firstName").innerText = `${displayName || tr("misc.user")} [${uniqueName}]`;
 
     // Store user email in session
     if (decodedToken.upn) {
@@ -83,15 +211,36 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     // Display token details
     const tokens = typeof tokenResponse === "object" ? tokenResponse : getSessionTokens();
     displayTokenDetails(tokens);
+    renderComprehensiveUserProfile({
+        accessToken: tokens.access_token || accessToken,
+        idToken: tokens.id_token || "",
+        accountClaims: decodedIdToken || {},
+    });
 
     // Fetch and display registered authentication methods
     fetchAndDisplayAuthMethods(tokens.access_token || accessToken);
 }
 
-function renderAuthenticatedUI(account) {
+function renderAuthenticatedUI(authResult) {
+    const account = authResult && authResult.account ? authResult.account : authResult;
     document.getElementById("authenticatedDiv").style.display = "block";
     document.getElementById("loginDiv").style.display = "none";
-    document.getElementById("firstName").innerText = account.name || "User";
+    document.getElementById("firstName").innerText = (account && account.name) || tr("misc.user");
+
+    const idTokenClaims = (authResult && authResult.idTokenClaims) || (account && account.idTokenClaims) || {};
+    const accessToken = authResult && authResult.accessToken ? authResult.accessToken : "";
+    const idToken = authResult && authResult.idToken ? authResult.idToken : "";
+
+    displayTokenDetails({
+        access_token: accessToken,
+        id_token: idToken,
+        refresh_token: "",
+    });
+    renderComprehensiveUserProfile({
+        accessToken,
+        idToken,
+        accountClaims: idTokenClaims,
+    });
 }
 
 function renderUnauthenticatedUI() {
@@ -108,10 +257,22 @@ function restoreSession() {
         const tokens = getSessionTokens();
         interactionType = sessionStorage.getItem(SESSION_KEYS.INTERACTION_TYPE) || "native";
         const decodedToken = parseJwt(tokens.access_token);
+        if (tokens.id_token) {
+            try {
+                applyLocaleFromClaims(parseJwt(tokens.id_token));
+            } catch (_err) {
+                // Ignore locale parsing errors and continue with current locale.
+            }
+        }
         document.getElementById("authenticatedDiv").style.display = "block";
         document.getElementById("loginDiv").style.display = "none";
         document.getElementById("firstName").innerText = decodedToken.name || "User";
         displayTokenDetails(tokens);
+        renderComprehensiveUserProfile({
+            accessToken: tokens.access_token,
+            idToken: tokens.id_token,
+            accountClaims: tokens.id_token ? parseJwt(tokens.id_token) : {},
+        });
         fetchAndDisplayAuthMethods(tokens.access_token);
         console.log("Session restored for:", decodedToken.name);
     }

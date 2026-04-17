@@ -167,6 +167,18 @@
     <label class="content-header is-hidden" id="nonHCP" data-i18n="auth.nonHcp">You are not an HCP</label>
     <label class="content-header is-hidden" id="profession"></label>
 
+    <div id="userProfileDiv" class="is-hidden">
+      <h3 class="token-section-title" data-i18n="auth.profile">Entra User Profile</h3>
+      <div id="userProfileHighlights" class="profile-highlights"></div>
+      <div class="token-card">
+        <button type="button" class="token-card-header" onclick="toggleTokenBody('profileClaimsBody')" aria-controls="profileClaimsBody" aria-expanded="false">
+          <span class="token-card-label" data-i18n="auth.profileClaims">Complete Claims Snapshot</span>
+          <span class="token-toggle">▼</span>
+        </button>
+        <pre id="profileClaimsBody" class="token-body is-hidden"></pre>
+      </div>
+    </div>
+
     <!-- Token details -->
     <div id="tokenDetailsDiv" class="is-hidden">
       <h3 class="token-section-title" data-i18n="auth.tokenDetails">Token Details</h3>
