@@ -9,6 +9,11 @@ function tr(key, params) {
     return key;
 }
 
+function setMsalFlowStage(flow, step, status = "info", next = "", endpoint = "", reset = false) {
+    if (typeof window.setAuthFlowStatus !== "function") return;
+    window.setAuthFlowStatus({ flow, step, status, next, endpoint, reset });
+}
+
 const msalInstance = new PublicClientApplication(msalConfig);
 const MSAL_SILENT_REFRESH = {
     timerId: null,
@@ -204,6 +209,8 @@ window.loginRedirect = loginRedirect;
 
 async function handleResponse(resp) {
     if (resp !== null) {
+        const flowName = interactionType === "redirect" ? "MSAL Redirect" : "MSAL Popup";
+        setMsalFlowStage(flowName, "Authorization response received", "info", "Acquiring access token silently.", "handleRedirectPromise/loginPopup result");
         accountId = resp.account.homeAccountId;
         msalInstance.setActiveAccount(resp.account);
         if (typeof window.setSessionInteractionType === "function") {
@@ -215,9 +222,11 @@ async function handleResponse(resp) {
 
         try {
             const tokenResponse = await acquireMsalTokenSilent(resp.account);
+            setMsalFlowStage(flowName, "Token acquired", "success", "Session active. Profile and token details are loading.", "acquireTokenSilent");
             await renderMsalAuthenticatedSession(resp.account, tokenResponse);
         } catch (tokenErr) {
             console.warn("Could not acquire MSAL access token for profile display:", tokenErr);
+            setMsalFlowStage(flowName, "Token partially available", "warning", "Session is active, but access token retrieval needs attention.", "acquireTokenSilent");
             await renderMsalAuthenticatedSession(resp.account, {
                 idTokenClaims: resp.idTokenClaims || resp.account?.idTokenClaims || {},
                 idToken: resp.idToken || "",
@@ -256,14 +265,17 @@ async function loginPopup() {
         if (typeof window.setSessionInteractionType === "function") {
             window.setSessionInteractionType("popup");
         }
+        setMsalFlowStage("MSAL Popup", "Opening popup", "info", "Complete interactive sign-in in the popup window.", "loginPopup", true);
         const loginResponse = await msalInstance.loginPopup({
             ...loginRequest,
             redirectUri: msalConfig.auth.redirectUri + "/redirect.html",
         });
+        setMsalFlowStage("MSAL Popup", "Popup completed", "info", "Processing authorization response.", "loginPopup");
         await handleResponse(loginResponse);
     } catch (error) {
         renderUnauthenticatedUI();
         const message = error?.message || String(error);
+        setMsalFlowStage("MSAL Popup", "Popup sign-in failed", "error", "Retry popup flow or use redirect flow for stricter browsers.", "loginPopup");
         if (typeof window.showErrorDiagnostics === "function") {
             window.showErrorDiagnostics({
                 error: "msal_popup_failed",
@@ -285,10 +297,12 @@ async function loginRedirect() {
         window.setSessionInteractionType("redirect");
     }
     try {
+        setMsalFlowStage("MSAL Redirect", "Redirecting to Microsoft sign-in", "info", "You will return here after authentication.", "loginRedirect", true);
         return msalInstance.loginRedirect(loginRequest);
     } catch (error) {
         renderUnauthenticatedUI();
         const message = error?.message || String(error);
+        setMsalFlowStage("MSAL Redirect", "Redirect sign-in failed", "error", "Retry redirect flow after checking configuration.", "loginRedirect");
         if (typeof window.showErrorDiagnostics === "function") {
             window.showErrorDiagnostics({
                 error: "msal_redirect_failed",

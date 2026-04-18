@@ -14,6 +14,18 @@ function tr(key, params) {
     return key;
 }
 
+function setNativeFlowStage(step, status = "info", next = "", endpoint = "", reset = false) {
+    if (typeof window.setAuthFlowStatus !== "function") return;
+    window.setAuthFlowStatus({
+        flow: "Native Auth",
+        step,
+        status,
+        next,
+        endpoint,
+        reset,
+    });
+}
+
 async function refreshNativeAuthSession() {
     const tokens = getSessionTokens();
     if (!tokens.refresh_token) {
@@ -91,16 +103,19 @@ async function login() {
 
     try {
         clearLoginNotice();
+        setNativeFlowStage("Initiating sign-in", "info", "Validating email and creating continuation token.", ENV.urlOauthInit, true);
 
         // 1. Initiate
         const initRes = await signInStart(email);
         FLOW_STATE.signIn = { email };
+        setNativeFlowStage("Password challenge issued", "info", "Submitting password challenge step.", ENV.urlOauthChallenge);
 
         // 2. Challenge (password)
         const challengeRes = await signInChallenge(initRes.continuation_token);
 
         // 3. Token (password)
         FLOW_STATE.signIn.continuation_token = challengeRes.continuation_token;
+        setNativeFlowStage("Exchanging password for tokens", "info", "Checking if additional verification is required.", ENV.urlOauthToken);
 
         let tokenRes;
         try {
@@ -114,6 +129,8 @@ async function login() {
             // and a continuation_token when MFA is needed.
             if (tokenErr.suberror === "mfa_required" && tokenErr.continuation_token) {
                 console.log("MFA required (suberror: mfa_required), entering MFA flow…");
+                setNativeFlowStage("MFA required", "warning", "Choose a verification method and complete the code challenge.", ENV.urlOauthToken);
+                setLoginNotice("info", "MFA is required for this account. Choose a method and enter the verification code to finish sign-in.");
                 await handleMfaFlow(tokenErr.continuation_token);
                 return;
             }
@@ -122,6 +139,8 @@ async function login() {
             // The response will include a continuation_token that we can use to drive the registration flow.
             else if (tokenErr.suberror === "registration_required" && tokenErr.continuation_token) {
                 console.log("Registration required (suberror: registration_required).");
+                setNativeFlowStage("MFA registration required", "warning", "Register a method first, then complete sign-in.", ENV.urlOauthToken);
+                setLoginNotice("info", "This account must register an MFA method before sign-in can complete. Follow the registration prompts.");
                 await handleRegistrationFlow(tokenErr.continuation_token);
                 return;
             }
@@ -130,10 +149,12 @@ async function login() {
         }
 
         // If we got here, no MFA was needed.
+        setNativeFlowStage("Sign-in complete", "success", "Session active. Token details are now available.", ENV.urlOauthToken);
         renderNativeAuthenticatedUI(tokenRes);
 
     } catch (err) {
         const message = err.error_description || err.message || JSON.stringify(err);
+        setNativeFlowStage("Sign-in failed", "error", "Review diagnostics and retry with a valid account state.", ENV.urlOauthToken);
         setLoginNotice("error", tr("msg.loginError", { message }));
         showErrorDiagnostics(err);
     }
@@ -378,12 +399,14 @@ async function resetPassword({ email, newPassword }) {
 // MFA flow helper
 // ---------------------------------------------------------------------------
 async function handleMfaFlow(continuationToken) {
+    setNativeFlowStage("MFA introspection", "info", "Loading available verification methods.", ENV.urlOauthIntrospect);
     // 4a. Introspect — discover available MFA challenge methods
     const introspectRes = await signInIntrospect(continuationToken);
     console.log("Introspect response:", introspectRes);
 
     const methods = introspectRes.methods || [];
     if (methods.length === 0) {
+        setNativeFlowStage("No MFA methods available", "error", "Register a method or contact your tenant administrator.", ENV.urlOauthIntrospect);
         alert(tr("msg.noMfaMethods"));
         return;
     }
@@ -397,6 +420,7 @@ async function handleMfaFlow(continuationToken) {
     }
 
     if (!selectedMethod) {
+        setNativeFlowStage("MFA cancelled", "warning", "Restart sign-in when ready.", ENV.urlOauthChallenge);
         alert(tr("msg.mfaCancelled"));
         return;
     }
@@ -404,6 +428,7 @@ async function handleMfaFlow(continuationToken) {
     console.log("Selected MFA method:", selectedMethod);
 
     // 4c. Challenge with MFA — triggers the OOB code delivery
+    setNativeFlowStage("Sending verification code", "info", "Check your selected channel for the code.", ENV.urlOauthChallenge);
     const mfaChallengeRes = await signInChallengeMFA(
         introspectRes.continuation_token || continuationToken,
         selectedMethod.id
@@ -416,11 +441,13 @@ async function handleMfaFlow(continuationToken) {
         tr("msg.enterCodeVia", { channel: channelLabel, hint: selectedMethod.login_hint })
     );
     if (!oobCode) {
+        setNativeFlowStage("MFA cancelled", "warning", "Restart sign-in when ready.", ENV.urlOauthToken);
         alert(tr("msg.mfaCancelled"));
         return;
     }
 
     // 4e. Token with MFA
+    setNativeFlowStage("Verifying MFA code", "info", "Completing token exchange.", ENV.urlOauthToken);
     const mfaTokenRes = await signInTokenMFA({
         continuation_token: mfaChallengeRes.continuation_token,
         oob: oobCode,
@@ -432,6 +459,7 @@ async function handleMfaFlow(continuationToken) {
     //     oob: oobCode,
     // });
     // console.log("MFA token Specifc response:", mfaTokenResSpecific);
+    setNativeFlowStage("Sign-in complete", "success", "Session active. Token details are now available.", ENV.urlOauthToken);
     renderNativeAuthenticatedUI(mfaTokenRes);
 }
 
@@ -893,12 +921,14 @@ async function registerContinue(token, code) {
 
 // Handle MFA Registration 
 async function handleRegistrationFlow(continuationToken ) {
+    setNativeFlowStage("MFA registration introspection", "info", "Loading available methods to register.", ENV.urlRegisterIntrospect);
     // 5a. Introspect — discover available MFA challenge methods
     const introspectReg = await registerIntrospect(continuationToken);
     console.log("Introspect response:", introspectReg);
 
     const methods = introspectReg.methods || [];
     if (methods.length === 0) {
+        setNativeFlowStage("No registration methods available", "error", "Contact your tenant administrator to enable MFA methods.", ENV.urlRegisterIntrospect);
         alert("No MFA methods available for this account.");
         return;
     }
@@ -916,6 +946,7 @@ async function handleRegistrationFlow(continuationToken ) {
     }
 
     if (!selectedMethod) {
+        setNativeFlowStage("Registration cancelled", "warning", "Restart sign-in when ready.", ENV.urlRegisterChallenge);
         alert("MFA registration cancelled.");
         return;
     }
@@ -923,6 +954,7 @@ async function handleRegistrationFlow(continuationToken ) {
     console.log("Selected MFA method:", selectedMethod);
 
     // 5c. Challenge with MFA — triggers the OOB code delivery
+    setNativeFlowStage("Sending registration verification code", "info", "Check your selected channel for the code.", ENV.urlRegisterChallenge);
     const mfaChallengeReg = await registerChallenge(
         introspectReg.continuation_token || continuationToken,
         selectedMethod.challenge_channel,
@@ -938,17 +970,21 @@ async function handleRegistrationFlow(continuationToken ) {
         `Enter the verification code sent via ${channelLabel} to ${targetHint}:`
     );
     if (!oobCode) {
+        setNativeFlowStage("Registration verification cancelled", "warning", "Restart sign-in when ready.", ENV.urlRegisterContinue);
         alert("MFA verification cancelled.");
         return;
     }
 
     // 5e. Continue registration with the OOB code
+    setNativeFlowStage("Verifying registration code", "info", "Completing method registration.", ENV.urlRegisterContinue);
     const registrationContinueRes = await registerContinue(mfaChallengeReg.continuation_token, oobCode);
     console.log("Registration continue response:", registrationContinueRes);
 
     // Build the request for the token endpoint
+    setNativeFlowStage("Finishing sign-in", "info", "Issuing tokens after successful registration.", ENV.urlOauthToken);
     const mfaTokenRes = await issueContinuationTokens(registrationContinueRes.continuation_token, FLOW_STATE.signIn.email || "");
     console.log("Token response:", mfaTokenRes);
+    setNativeFlowStage("Sign-in complete", "success", "Session active. Token details are now available.", ENV.urlOauthToken);
     renderNativeAuthenticatedUI(mfaTokenRes);
 }
 

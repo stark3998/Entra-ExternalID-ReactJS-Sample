@@ -43,6 +43,8 @@
       <nav class="navbar-links" aria-label="Main navigation">
         <a href="#" class="navbar-link navbar-link-home" data-nav="home" onclick="showHomePage(); return false;" data-i18n="nav.home">Home</a>
         <a href="#" class="navbar-link" data-nav="docs" onclick="scrollToDocsSection(); return false;" data-i18n="nav.docs">Documentation</a>
+        <a href="#" class="navbar-link" data-nav="details" onclick="showDetailedDocsPage(); return false;">Detailed Docs</a>
+        <a href="#" class="navbar-link navbar-link-cta is-hidden" data-nav="docs" onclick="exploreApiReference(); return false;" id="navExploreApiBtn" data-i18n="home.exploreApi">Explore the API</a>
         <a href="#" class="navbar-link navbar-link-cta" data-nav="login" onclick="showLoginPage(); return false;" id="navSignInBtn" data-i18n="nav.signIn">Sign In</a>
       </nav>
 
@@ -69,7 +71,9 @@
     <div class="navbar-mobile-menu is-hidden" id="navMobileMenu">
       <a href="#" class="navbar-mobile-link" onclick="showHomePage(); toggleNavMenu(); return false;" data-i18n="nav.home">Home</a>
       <a href="#" class="navbar-mobile-link" onclick="scrollToDocsSection(); toggleNavMenu(); return false;" data-i18n="nav.docs">Documentation</a>
-      <a href="#" class="navbar-mobile-link navbar-mobile-link-cta" onclick="showLoginPage(); toggleNavMenu(); return false;" data-i18n="nav.signIn">Sign In</a>
+      <a href="#" class="navbar-mobile-link" onclick="showDetailedDocsPage(); toggleNavMenu(); return false;">Detailed Docs</a>
+      <a href="#" class="navbar-mobile-link navbar-mobile-link-cta is-hidden" id="navExploreApiBtnMobile" onclick="exploreApiReference(); toggleNavMenu(); return false;" data-i18n="home.exploreApi">Explore the API</a>
+      <a href="#" class="navbar-mobile-link navbar-mobile-link-cta" id="navSignInBtnMobile" onclick="showLoginPage(); toggleNavMenu(); return false;" data-i18n="nav.signIn">Sign In</a>
     </div>
   </header>
 
@@ -77,6 +81,20 @@
        HOMEPAGE
        ================================================================ -->
   <div id="homeDiv" class="home-page">
+
+    <section class="home-role-banner" aria-label="Mode selector">
+      <div class="home-role-banner-inner">
+        <div>
+          <p class="home-role-label">Mode</p>
+          <h2 class="home-role-title">Choose your learning path</h2>
+          <p class="home-role-copy">Switch between Developer Mode and End User Mode at any time. Your choice is remembered in this browser.</p>
+        </div>
+        <div class="home-role-actions" role="group" aria-label="User mode">
+          <button id="modeDeveloperBtn" type="button" class="btn-role-mode" onclick="chooseUserMode('developer')">Developer Mode</button>
+          <button id="modeEndUserBtn" type="button" class="btn-role-mode" onclick="chooseUserMode('end-user')">End User Mode</button>
+        </div>
+      </div>
+    </section>
 
     <!-- Hero Section -->
     <section class="home-hero">
@@ -86,7 +104,7 @@
         <p class="home-hero-subtitle" data-i18n="home.heroSubtitle">A direct, CORS-friendly API surface for building fully custom sign-in, sign-up, MFA, and password reset flows without redirecting users away from your application.</p>
         <div class="home-hero-actions">
           <button type="button" class="btn-home-primary" onclick="showLoginPage()" data-i18n="home.tryLive">Try it live →</button>
-          <a href="#docs-overview" class="btn-home-secondary" data-i18n="home.exploreApi">Explore the API</a>
+          <a href="#" class="btn-home-secondary" onclick="exploreApiReference(); return false;" data-i18n="home.exploreApi">Explore the API</a>
         </div>
         <div class="home-hero-badges">
           <span class="home-badge">Native Auth APIs</span>
@@ -98,8 +116,31 @@
       </div>
     </section>
 
+    <section id="docs-detailed" class="home-section home-doc-tabs">
+      <div class="home-section-inner">
+        <h2 class="home-section-title">Detailed Documentation</h2>
+        <p class="home-section-lead">Native Auth comes first in this lab, then compare MSAL Popup and Browser Redirect implementation trade-offs.</p>
+        <div class="doc-tab-list" role="tablist" aria-label="Detailed documentation tabs">
+          <button id="docTabNative" type="button" class="doc-tab-button is-active" role="tab" aria-selected="true" onclick="openDocTab('native')">Native Auth</button>
+          <button id="docTabPopup" type="button" class="doc-tab-button" role="tab" aria-selected="false" onclick="openDocTab('popup')">MSAL Popup</button>
+          <button id="docTabRedirect" type="button" class="doc-tab-button" role="tab" aria-selected="false" onclick="openDocTab('redirect')">MSAL Redirect</button>
+          <button id="docTabComparison" type="button" class="doc-tab-button" role="tab" aria-selected="false" onclick="openDocTab('comparison')">Comparison</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section home-guided-journey" id="guided-journey">
+      <div class="home-section-inner">
+        <div class="guided-journey-header">
+          <h2 class="home-section-title">Guided Journey</h2>
+          <p class="home-section-lead">Recommended order: Native Auth → MSAL Popup → MSAL Redirect. Steps are softly gated, but you can skip and continue anytime.</p>
+        </div>
+        <div id="guidedJourneyList" class="guided-journey-list"></div>
+      </div>
+    </section>
+
     <!-- Quick overview cards -->
-    <section class="home-section home-section-cards" id="docs-overview">
+    <section class="home-section home-section-cards docs-tab-panel" id="docs-overview" data-doc-tab="native">
       <div class="home-section-inner">
         <h2 class="home-section-title" data-i18n="home.overviewTitle">What is Native Authentication?</h2>
         <p class="home-section-lead" data-i18n="home.overviewLead">Native Authentication lets your application call Entra External ID endpoints directly using standard OAuth 2.0 grants — no hosted login page required. Your UI stays in full control at every step.</p>
@@ -129,7 +170,7 @@
     </section>
 
     <!-- API Reference -->
-    <section class="home-section home-section-alt" id="docs-api">
+    <section class="home-section home-section-alt docs-tab-panel developer-only" id="docs-api" data-doc-tab="native">
       <div class="home-section-inner">
         <h2 class="home-section-title" data-i18n="home.apiTitle">API Reference</h2>
         <p class="home-section-lead" data-i18n="home.apiLead">All endpoints are relative to your tenant authority: <code class="home-inline-code">https://{subdomain}.ciamlogin.com/{tenantId}</code></p>
@@ -390,7 +431,7 @@
     </section>
 
     <!-- Authentication Flows -->
-    <section class="home-section" id="docs-flows">
+    <section class="home-section docs-tab-panel" id="docs-flows" data-doc-tab="native">
       <div class="home-section-inner">
         <h2 class="home-section-title" data-i18n="home.flowsTitle">Authentication Flows</h2>
         <p class="home-section-lead" data-i18n="home.flowsLead">Each flow is a sequence of API calls connected by continuation tokens. Every step must receive and forward the latest token.</p>
@@ -492,7 +533,7 @@
     </section>
 
     <!-- Key Concepts -->
-    <section class="home-section home-section-alt" id="docs-concepts">
+    <section class="home-section home-section-alt docs-tab-panel" id="docs-concepts" data-doc-tab="native">
       <div class="home-section-inner">
         <h2 class="home-section-title" data-i18n="home.conceptsTitle">Key Concepts</h2>
         <div class="concepts-grid">
@@ -525,7 +566,7 @@
     </section>
 
     <!-- Best Practices & Error Handling -->
-    <section class="home-section" id="docs-errors">
+    <section class="home-section docs-tab-panel developer-only" id="docs-errors" data-doc-tab="native">
       <div class="home-section-inner">
         <h2 class="home-section-title" data-i18n="home.bestPracticesTitle">Best Practices &amp; Error Handling</h2>
         <div class="best-practices-grid">
@@ -570,6 +611,132 @@
             <tr><td><code>unauthorized_client</code></td><td>—</td><td>App not configured for this flow</td><td>Check app registration in Entra portal</td></tr>
           </tbody>
         </table>
+
+        <div id="productionChecklist" class="production-checklist">
+          <h3 class="home-subsection-title">Production Hardening Checklist</h3>
+          <p class="home-section-lead">This starter is optimized for learning. Validate these items before production rollout.</p>
+          <ul class="bp-list">
+            <li>Keep raw token values hidden in production and remove demo-mode token reveal controls.</li>
+            <li>Prefer secure, server-backed session/token handling over browser persistence for sensitive workloads.</li>
+            <li>Review redirect URIs, token scopes, and consent requirements across all environments.</li>
+            <li>Log and monitor only safe diagnostics: never log token values or full auth payloads.</li>
+            <li>Validate accessibility, error recovery, and browser compatibility for your supported audience.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section home-section-alt docs-tab-panel" id="docs-popup" data-doc-tab="popup">
+      <div class="home-section-inner">
+        <h2 class="home-section-title">MSAL Popup Flow</h2>
+        <p class="home-section-lead">Popup keeps app context and feels seamless, but can be blocked by browser settings and restrictive environments.</p>
+        <div class="flows-grid">
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-primary">Popup Mechanics</div>
+              <h3 class="flow-card-title">How it works</h3>
+            </div>
+            <ol class="flow-steps">
+              <li>App calls <code>loginPopup()</code> with configured scopes.</li>
+              <li>Browser opens auth popup window.</li>
+              <li>User completes auth and consent in popup.</li>
+              <li>Popup closes and parent window receives tokens.</li>
+            </ol>
+          </div>
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-warning">Edge Cases</div>
+              <h3 class="flow-card-title">What can fail</h3>
+            </div>
+            <ul class="flow-steps">
+              <li>Pop-up blockers or strict enterprise browser policies.</li>
+              <li>Safari and iOS behavior differences around window focus.</li>
+              <li>User closes popup before completion.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section docs-tab-panel" id="docs-redirect" data-doc-tab="redirect">
+      <div class="home-section-inner">
+        <h2 class="home-section-title">MSAL Browser Redirect Flow</h2>
+        <p class="home-section-lead">Redirect is broadly compatible and reliable when popup is blocked, but causes full-page navigation away from app state.</p>
+        <div class="flows-grid">
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-success">Redirect Mechanics</div>
+              <h3 class="flow-card-title">How it works</h3>
+            </div>
+            <ol class="flow-steps">
+              <li>App calls <code>loginRedirect()</code>.</li>
+              <li>Browser navigates to Microsoft identity endpoint.</li>
+              <li>After sign-in, browser returns to configured redirect URI.</li>
+              <li>App processes response in <code>handleRedirectPromise()</code>.</li>
+            </ol>
+          </div>
+          <div class="flow-card">
+            <div class="flow-card-header">
+              <div class="flow-badge flow-badge-danger">Edge Cases</div>
+              <h3 class="flow-card-title">What to handle</h3>
+            </div>
+            <ul class="flow-steps">
+              <li>Lost transient UI state if not persisted before redirect.</li>
+              <li>Return-route and deep-link continuity for complex SPAs.</li>
+              <li>Multi-tab flows and stale interaction state.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section home-section-alt docs-tab-panel" id="docs-comparison" data-doc-tab="comparison">
+      <div class="home-section-inner">
+        <h2 class="home-section-title">Popup vs Redirect: Deep Comparison</h2>
+        <p class="home-section-lead">Use this matrix as an architecture decision aid for your product and platform constraints.</p>
+        <div class="comparison-matrix-wrap">
+          <table class="comparison-matrix">
+            <thead>
+              <tr>
+                <th>Dimension</th>
+                <th>MSAL Popup</th>
+                <th>MSAL Redirect</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>UX continuity</td>
+                <td>Strong continuity in same page context.</td>
+                <td>Full page navigation breaks continuity temporarily.</td>
+              </tr>
+              <tr>
+                <td>Browser constraints</td>
+                <td>Can fail with popup blockers or strict policies.</td>
+                <td>More reliable across restrictive browser settings.</td>
+              </tr>
+              <tr>
+                <td>Security & token handling</td>
+                <td>Same token semantics; fewer route re-entry concerns.</td>
+                <td>Requires careful redirect URI and state handling.</td>
+              </tr>
+              <tr>
+                <td>Error recoverability</td>
+                <td>Inline recovery feels immediate.</td>
+                <td>Recovery often handled after navigation roundtrip.</td>
+              </tr>
+              <tr>
+                <td>Implementation complexity</td>
+                <td>Simpler UX integration, more popup fallbacks needed.</td>
+                <td>Predictable flow, but more app-state restoration logic.</td>
+              </tr>
+              <tr>
+                <td>Accessibility</td>
+                <td>Popup context switch can confuse some assistive tech users.</td>
+                <td>Single-window navigation can be easier to follow.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -692,7 +859,13 @@
         <form id="form1" aria-describedby="signInHelp">
           <h2 class="panel-title" data-i18n="login.panelTitle">Sign in</h2>
           <p class="panel-subtitle" id="signInHelp" data-i18n="login.panelSubtitle">Use a supported authentication option</p>
+          <div class="prod-guardrail">
+            <strong>Starter app guardrail:</strong> This demo may expose raw token tools for learning.
+            <a href="#" onclick="goToProductionChecklist(); return false;">View production hardening checklist</a>.
+          </div>
           <div id="authNotice" class="auth-notice is-hidden" aria-live="polite"></div>
+          <div id="authFlowStatusPanel" class="auth-flow-status is-hidden" aria-live="polite"></div>
+          <div id="authFlowTimelinePanel" class="auth-flow-log is-hidden" aria-live="polite"></div>
           <div class="form-group">
             <label class="sr-only" for="emailText" data-i18n="login.emailLabel">Work email</label>
             <input type="email" class="form-control" id="emailText" placeholder="Work email" data-i18n-placeholder="login.emailPlaceholder" autocomplete="email" required>
@@ -702,6 +875,25 @@
             <input type="password" class="form-control mt-password" id="passwordText"
               placeholder="Password" data-i18n-placeholder="login.passwordPlaceholder" autocomplete="current-password" required>
           </div>
+
+          <div class="flow-choice-grid" aria-label="Sign-in flow comparison">
+            <div class="flow-choice-card">
+              <h3>Native Auth</h3>
+              <p>Best for API-driven, fully customized journeys.</p>
+              <span class="flow-choice-chip">Direct flow control</span>
+            </div>
+            <div class="flow-choice-card">
+              <h3>MSAL Popup</h3>
+              <p>Great UX continuity, but can be blocked by browser policy.</p>
+              <span class="flow-choice-chip">Context preserved</span>
+            </div>
+            <div class="flow-choice-card">
+              <h3>MSAL Redirect</h3>
+              <p>Most compatible fallback for restrictive browser environments.</p>
+              <span class="flow-choice-chip">Strong compatibility</span>
+            </div>
+          </div>
+
           <button type="button" onclick="login()" class="btn btn-primary flow-btn flow-btn-native">
             <span data-i18n="login.native">Continue with Native Auth</span>
           </button>
@@ -767,9 +959,14 @@
     <!-- Token details -->
     <div id="tokenDetailsDiv" class="is-hidden">
       <h3 class="token-section-title" data-i18n="auth.tokenDetails">Token Details</h3>
+      <div class="prod-guardrail">
+        <strong>Production safety:</strong> Keep token inspection tooling scoped to demo/test environments.
+        <a href="#" onclick="goToProductionChecklist(); return false;">Review hardening checklist</a>.
+      </div>
       <div id="demoModeWarning" class="demo-mode-warning is-hidden" data-i18n="demo.warning">Demo mode is enabled. Raw token values are visible and should only be used in controlled environments.</div>
       <div id="tokenGuidanceBanner" class="token-guidance-banner is-hidden"></div>
       <div id="refreshScheduleIndicator" class="refresh-schedule-indicator is-hidden"></div>
+      <div id="flowCompletionSummary" class="flow-comparison-summary is-hidden"></div>
 
       <div class="token-card">
         <button type="button" class="token-card-header" onclick="toggleTokenBody('accessTokenBody')" aria-controls="accessTokenBody" aria-expanded="false">
@@ -858,6 +1055,7 @@
     </div>
 
     <div class="auth-actions">
+      <button type="button" onclick="exploreApiReference()" class="btn-settings" data-i18n="home.exploreApi">Explore the API</button>
       <a href="/settings.html" class="btn-settings" data-i18n="auth.settings">Open Settings</a>
       <form id="form2">
         <button type="button" onclick="logout()" class="btn btn-primary">

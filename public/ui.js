@@ -29,6 +29,10 @@ const SESSION_KEYS = {
     INTERACTION_TYPE: "nativeAuth_interaction_type",
     DEMO_MODE: "nativeAuth_demo_mode",
     GRAPH_PROFILE_SELECT_FIELDS: "nativeAuth_graph_profile_select_fields",
+    USER_MODE: "nativeAuth_user_mode",
+    DOC_ACTIVE_TAB: "nativeAuth_doc_active_tab",
+    GUIDED_JOURNEY_STATE: "nativeAuth_guided_journey_state",
+    FLOW_COMPLETION_HISTORY: "nativeAuth_flow_completion_history",
 };
 
 const SESSION_STORAGE = window.localStorage;
@@ -80,6 +84,13 @@ const REFRESH_SCHEDULE_STATE = {
     lastRefreshAt: null,
     nextRefreshAt: null,
     refreshSource: "", // "scheduled", "manual", "restore"
+};
+
+const GUIDED_JOURNEY_ORDER = ["native", "popup", "redirect"];
+const GUIDED_JOURNEY_LABELS = {
+    native: "Step 1: Native Auth",
+    popup: "Step 2: MSAL Popup",
+    redirect: "Step 3: MSAL Redirect",
 };
 
 function tr(key, params) {
@@ -149,6 +160,384 @@ function setLoginNotice(type, message) {
 function clearLoginNotice() {
     setLoginNotice("", "");
 }
+
+const AUTH_FLOW_TIMELINE = {
+    byFlow: {},
+};
+const FLOW_TIMELINE_LOG_LIMIT = 10;
+const FLOW_COMPLETION_HISTORY_LIMIT = 10;
+
+function formatDuration(ms) {
+    const safeMs = Number.isFinite(ms) && ms > 0 ? ms : 0;
+    if (safeMs < 1000) return `${Math.round(safeMs)}ms`;
+    const seconds = safeMs / 1000;
+    if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remaining = Math.round(seconds % 60);
+    return `${minutes}m ${remaining}s`;
+}
+
+function getFlowCompletionHistory() {
+    const raw = getSessionItem(SESSION_KEYS.FLOW_COMPLETION_HISTORY);
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_err) {
+        return [];
+    }
+}
+
+function setFlowCompletionHistory(history) {
+    const normalized = Array.isArray(history) ? history.slice(0, FLOW_COMPLETION_HISTORY_LIMIT) : [];
+    setSessionItem(SESSION_KEYS.FLOW_COMPLETION_HISTORY, JSON.stringify(normalized));
+}
+
+function persistCompletedFlow(entry) {
+    if (!entry || !entry.flow) return;
+    const history = getFlowCompletionHistory();
+    history.unshift(entry);
+    setFlowCompletionHistory(history);
+}
+
+function renderAuthFlowTimelineLog(flow, entries) {
+    const panel = document.getElementById("authFlowTimelinePanel");
+    if (!panel) return;
+
+    const list = Array.isArray(entries) ? entries.slice(-FLOW_TIMELINE_LOG_LIMIT).reverse() : [];
+    if (!flow || list.length === 0) {
+        panel.innerHTML = "";
+        panel.className = "auth-flow-log is-hidden";
+        return;
+    }
+
+    panel.innerHTML = [
+        `<div class="flow-log-title">Flow Timeline (${escapeHtml(flow)})</div>`,
+        `<ol class="flow-log-list">${list.map((entry) => (`<li class="flow-log-item">` +
+            `<span class="flow-log-stage">${escapeHtml(entry.step)}</span>` +
+            `<span class="flow-log-meta">${escapeHtml(formatDuration(entry.elapsedMs))} total | ${escapeHtml(formatDuration(entry.stageMs))} stage</span>` +
+            (entry.endpoint ? `<span class="flow-log-endpoint">${escapeHtml(entry.endpoint)}</span>` : "") +
+            `</li>`)).join("")}</ol>`,
+    ].join("");
+    panel.className = "auth-flow-log";
+}
+
+function renderFlowCompletionSummary() {
+    const panel = document.getElementById("flowCompletionSummary");
+    if (!panel) return;
+
+    const history = getFlowCompletionHistory();
+    const latest = history[0];
+    const previous = history[1];
+
+    if (!latest) {
+        panel.innerHTML = "";
+        panel.className = "flow-comparison-summary is-hidden";
+        return;
+    }
+
+    const latestCompleted = latest.completedAt ? new Date(latest.completedAt).toLocaleTimeString() : "-";
+    const previousCompleted = previous && previous.completedAt ? new Date(previous.completedAt).toLocaleTimeString() : "-";
+    const deltaMs = previous && Number.isFinite(previous.totalMs) ? latest.totalMs - previous.totalMs : null;
+    const deltaLabel = deltaMs === null
+        ? "No previous completed flow in this session."
+        : `Delta vs previous: ${deltaMs >= 0 ? "+" : ""}${formatDuration(deltaMs)}.`;
+
+    panel.innerHTML = [
+        `<div class="flow-compare-title">Recent Flow Comparison</div>`,
+        `<div class="flow-compare-grid">`,
+        `<section class="flow-compare-card">` +
+        `<div class="flow-compare-label">Latest</div>` +
+        `<div class="flow-compare-flow">${escapeHtml(latest.flow)}</div>` +
+        `<div class="flow-compare-time">${escapeHtml(formatDuration(latest.totalMs || 0))}</div>` +
+        `<div class="flow-compare-meta">Completed ${escapeHtml(latestCompleted)} | Stages ${escapeHtml(String(latest.stageCount || 0))}</div>` +
+        `</section>`,
+        `<section class="flow-compare-card">` +
+        `<div class="flow-compare-label">Previous</div>` +
+        `<div class="flow-compare-flow">${escapeHtml(previous ? previous.flow : "-")}</div>` +
+        `<div class="flow-compare-time">${escapeHtml(previous ? formatDuration(previous.totalMs || 0) : "-")}</div>` +
+        `<div class="flow-compare-meta">Completed ${escapeHtml(previousCompleted)} | Stages ${escapeHtml(String(previous ? (previous.stageCount || 0) : 0))}</div>` +
+        `</section>`,
+        `</div>`,
+        `<div class="flow-compare-delta">${escapeHtml(deltaLabel)}</div>`,
+    ].join("");
+    panel.className = "flow-comparison-summary";
+}
+
+function setAuthFlowStatus(payload = {}) {
+    const panel = document.getElementById("authFlowStatusPanel");
+    if (!panel) return;
+
+    const flow = String(payload.flow || "Authentication");
+    const step = String(payload.step || "Preparing");
+    const next = payload.next ? String(payload.next) : "";
+    const endpoint = payload.endpoint ? String(payload.endpoint) : "";
+    const status = ["info", "success", "warning", "error"].includes(payload.status) ? payload.status : "info";
+    const now = Date.now();
+
+    if (payload.reset || !AUTH_FLOW_TIMELINE.byFlow[flow]) {
+        AUTH_FLOW_TIMELINE.byFlow[flow] = {
+            startedAt: now,
+            lastStageAt: now,
+            entries: [],
+        };
+    }
+
+    const timeline = AUTH_FLOW_TIMELINE.byFlow[flow];
+    const elapsedMs = Math.max(0, now - timeline.startedAt);
+    const stageMs = Math.max(0, now - timeline.lastStageAt);
+    timeline.lastStageAt = now;
+    timeline.entries.push({ step, status, next, endpoint, elapsedMs, stageMs, at: now });
+    if (timeline.entries.length > FLOW_TIMELINE_LOG_LIMIT) {
+        timeline.entries = timeline.entries.slice(-FLOW_TIMELINE_LOG_LIMIT);
+    }
+
+    panel.innerHTML = [
+        `<div class="flow-line-title">Flow: ${escapeHtml(flow)}</div>`,
+        `<div class="flow-line-step">Stage: ${escapeHtml(step)}</div>`,
+        `<div class="flow-line-metrics"><span class="flow-time-chip">Elapsed ${escapeHtml(formatDuration(elapsedMs))}</span><span class="flow-time-chip">Stage ${escapeHtml(formatDuration(stageMs))}</span></div>`,
+        endpoint ? `<div class="flow-line-endpoint">Endpoint: ${escapeHtml(endpoint)}</div>` : "",
+        next ? `<div class="flow-line-next">Next: ${escapeHtml(next)}</div>` : "",
+    ].join("");
+    panel.className = `auth-flow-status is-${status}`;
+    renderAuthFlowTimelineLog(flow, timeline.entries);
+
+    if (status === "success" || status === "error") {
+        persistCompletedFlow({
+            flow,
+            status,
+            totalMs: elapsedMs,
+            completedAt: now,
+            finalStep: step,
+            endpoint,
+            stageCount: timeline.entries.length,
+        });
+        renderFlowCompletionSummary();
+        delete AUTH_FLOW_TIMELINE.byFlow[flow];
+    }
+}
+
+function clearAuthFlowStatus() {
+    const panel = document.getElementById("authFlowStatusPanel");
+    const timelinePanel = document.getElementById("authFlowTimelinePanel");
+    if (!panel) return;
+    panel.innerHTML = "";
+    panel.className = "auth-flow-status is-hidden";
+    if (timelinePanel) {
+        timelinePanel.innerHTML = "";
+        timelinePanel.className = "auth-flow-log is-hidden";
+    }
+    AUTH_FLOW_TIMELINE.byFlow = {};
+}
+
+window.setAuthFlowStatus = setAuthFlowStatus;
+window.clearAuthFlowStatus = clearAuthFlowStatus;
+
+function getUserMode() {
+    const stored = getSessionItem(SESSION_KEYS.USER_MODE);
+    return stored === "end-user" ? "end-user" : "developer";
+}
+
+function setUserMode(mode) {
+    const normalized = mode === "end-user" ? "end-user" : "developer";
+    setSessionItem(SESSION_KEYS.USER_MODE, normalized);
+    applyUserModeUI();
+    return normalized;
+}
+
+function applyUserModeUI() {
+    const mode = getUserMode();
+    const homeDiv = document.getElementById("homeDiv");
+    if (homeDiv) {
+        homeDiv.setAttribute("data-user-mode", mode);
+    }
+    const developerBtn = document.getElementById("modeDeveloperBtn");
+    const endUserBtn = document.getElementById("modeEndUserBtn");
+    if (developerBtn) developerBtn.classList.toggle("is-active", mode === "developer");
+    if (endUserBtn) endUserBtn.classList.toggle("is-active", mode === "end-user");
+}
+
+function chooseUserMode(mode) {
+    const selected = setUserMode(mode);
+    const notice = selected === "developer"
+        ? "Developer mode enabled: full diagnostics and deep implementation details are visible."
+        : "End User mode enabled: simplified learning path with less implementation detail.";
+    setLoginNotice("info", notice);
+    renderGuidedJourney();
+}
+
+window.chooseUserMode = chooseUserMode;
+
+function getActiveDocTab() {
+    const stored = getSessionItem(SESSION_KEYS.DOC_ACTIVE_TAB) || "native";
+    return ["native", "popup", "redirect", "comparison"].includes(stored) ? stored : "native";
+}
+
+function openDocTab(tabName, options = {}) {
+    const tab = ["native", "popup", "redirect", "comparison"].includes(tabName) ? tabName : "native";
+    setSessionItem(SESSION_KEYS.DOC_ACTIVE_TAB, tab);
+
+    document.querySelectorAll(".docs-tab-panel").forEach((panel) => {
+        panel.classList.toggle("is-hidden", panel.getAttribute("data-doc-tab") !== tab);
+    });
+    document.querySelectorAll(".doc-tab-button").forEach((button) => {
+        const isActive = button.id === `docTab${tab.charAt(0).toUpperCase()}${tab.slice(1)}`;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", String(isActive));
+    });
+
+    if (options.scroll !== false) {
+        const anchor = document.getElementById("docs-detailed");
+        if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+}
+
+window.openDocTab = openDocTab;
+
+function showDetailedDocsPage() {
+    showHomePage();
+    _setNavActive("details");
+    openDocTab(getActiveDocTab());
+}
+
+window.showDetailedDocsPage = showDetailedDocsPage;
+
+function exploreApiReference() {
+    showHomePage();
+    _setNavActive("docs");
+    openDocTab("native", { scroll: false });
+
+    const apiSection = document.getElementById("docs-api");
+    const fallbackSection = document.getElementById("docs-overview");
+    const apiVisible = apiSection && window.getComputedStyle(apiSection).display !== "none";
+
+    if (apiVisible) {
+        apiSection.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+    }
+
+    if (fallbackSection) {
+        fallbackSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    if (getUserMode() !== "developer") {
+        setLoginNotice("info", "API reference details are in Developer Mode. Switch modes to view the full endpoint catalog.");
+    }
+}
+
+window.exploreApiReference = exploreApiReference;
+
+function normalizeGuidedJourneyState(rawState) {
+    const validStates = new Set(["not-started", "in-progress", "completed", "skipped"]);
+    const normalized = {};
+    GUIDED_JOURNEY_ORDER.forEach((step) => {
+        const candidate = rawState && rawState[step];
+        normalized[step] = validStates.has(candidate) ? candidate : "not-started";
+    });
+    return normalized;
+}
+
+function getGuidedJourneyState() {
+    try {
+        const raw = getSessionItem(SESSION_KEYS.GUIDED_JOURNEY_STATE);
+        if (!raw) return normalizeGuidedJourneyState({});
+        return normalizeGuidedJourneyState(JSON.parse(raw));
+    } catch (_err) {
+        return normalizeGuidedJourneyState({});
+    }
+}
+
+function setGuidedJourneyState(nextState) {
+    const normalized = normalizeGuidedJourneyState(nextState || {});
+    setSessionItem(SESSION_KEYS.GUIDED_JOURNEY_STATE, JSON.stringify(normalized));
+    return normalized;
+}
+
+function getRecommendedGuidedStep(state) {
+    const currentState = state || getGuidedJourneyState();
+    for (const step of GUIDED_JOURNEY_ORDER) {
+        if (currentState[step] !== "completed" && currentState[step] !== "skipped") {
+            return step;
+        }
+    }
+    return GUIDED_JOURNEY_ORDER[GUIDED_JOURNEY_ORDER.length - 1];
+}
+
+function renderGuidedJourney() {
+    const container = document.getElementById("guidedJourneyList");
+    if (!container) return;
+
+    const state = getGuidedJourneyState();
+    const recommended = getRecommendedGuidedStep(state);
+    const recommendedIndex = GUIDED_JOURNEY_ORDER.indexOf(recommended);
+
+    container.innerHTML = GUIDED_JOURNEY_ORDER.map((step, index) => {
+        const stepState = state[step] || "not-started";
+        const isRecommended = step === recommended;
+        const isSoftLocked = index > recommendedIndex && stepState === "not-started";
+        const statusText = {
+            "not-started": isSoftLocked ? "Soft gated: You can still open or skip" : "Not started",
+            "in-progress": "In progress",
+            "completed": "Completed",
+            "skipped": "Skipped",
+        }[stepState] || "Not started";
+
+        return (
+            `<div class="guided-step ${isRecommended ? "is-recommended" : ""}" data-state="${isSoftLocked ? "locked" : stepState}">` +
+            `<div class="guided-step-label">${escapeHtml(GUIDED_JOURNEY_LABELS[step])}</div>` +
+            `<div class="guided-step-status state-${stepState}">${escapeHtml(statusText)}</div>` +
+            `<div class="guided-step-actions">` +
+            `<button type="button" class="btn-guided btn-guided-primary" onclick="openGuidedStep('${step}')">Open docs</button>` +
+            `<button type="button" class="btn-guided" onclick="completeGuidedStep('${step}')">Mark complete</button>` +
+            `<button type="button" class="btn-guided" onclick="skipGuidedStep('${step}')">Skip</button>` +
+            `</div>` +
+            `</div>`
+        );
+    }).join("");
+}
+
+function openGuidedStep(step) {
+    const target = GUIDED_JOURNEY_ORDER.includes(step) ? step : "native";
+    const state = getGuidedJourneyState();
+    if (state[target] === "not-started") {
+        state[target] = "in-progress";
+        setGuidedJourneyState(state);
+    }
+    openDocTab(target);
+    renderGuidedJourney();
+}
+
+function completeGuidedStep(step) {
+    if (!GUIDED_JOURNEY_ORDER.includes(step)) return;
+    const state = getGuidedJourneyState();
+    state[step] = "completed";
+    setGuidedJourneyState(state);
+    renderGuidedJourney();
+}
+
+function skipGuidedStep(step) {
+    if (!GUIDED_JOURNEY_ORDER.includes(step)) return;
+    const state = getGuidedJourneyState();
+    state[step] = "skipped";
+    setGuidedJourneyState(state);
+    renderGuidedJourney();
+}
+
+window.openGuidedStep = openGuidedStep;
+window.completeGuidedStep = completeGuidedStep;
+window.skipGuidedStep = skipGuidedStep;
+
+function goToProductionChecklist() {
+    showHomePage();
+    _setNavActive("docs");
+    openDocTab("native", { scroll: false });
+    const checklist = document.getElementById("productionChecklist");
+    if (checklist) {
+        checklist.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+}
+
+window.goToProductionChecklist = goToProductionChecklist;
 
 function setSessionInteractionType(type) {
     interactionType = type || "";
@@ -1128,12 +1517,13 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     applyLocaleFromClaims(decodedIdToken || decodedToken);
 
     clearLoginNotice();
+    clearAuthFlowStatus();
     console.log("Decoded token payload:", decodedToken);
     document.getElementById("authenticatedDiv").style.display = "block";
     document.getElementById("loginDiv").style.display = "none";
     const _homeNative = document.getElementById("homeDiv"); if (_homeNative) _homeNative.style.display = "none";
     _setNavActive("");
-    const _signInNative = document.getElementById("navSignInBtn"); if (_signInNative) _signInNative.style.display = "none";
+    setNavbarAuthCtas(true);
     const familyName = (decodedIdToken && decodedIdToken.family_name) || decodedToken.family_name || "";
     const givenName = (decodedIdToken && decodedIdToken.given_name) || decodedToken.given_name || "";
     const uniqueName =
@@ -1154,6 +1544,7 @@ function renderNativeAuthenticatedUI(tokenResponse) {
     const tokens = typeof tokenResponse === "object" ? tokenResponse : getSessionTokens();
     displayTokenDetails(tokens);
     applyDemoModeState();
+    renderFlowCompletionSummary();
     renderComprehensiveUserProfile({
         accessToken: tokens.access_token || accessToken,
         idToken: tokens.id_token || "",
@@ -1172,7 +1563,7 @@ function renderAuthenticatedUI(authResult) {
     document.getElementById("loginDiv").style.display = "none";
     const _homeMsal = document.getElementById("homeDiv"); if (_homeMsal) _homeMsal.style.display = "none";
     _setNavActive("");
-    const _signInMsal = document.getElementById("navSignInBtn"); if (_signInMsal) _signInMsal.style.display = "none";
+    setNavbarAuthCtas(true);
     document.getElementById("firstName").innerText = (account && account.name) || tr("misc.user");
 
     const idTokenClaims = (authResult && authResult.idTokenClaims) || (account && account.idTokenClaims) || {};
@@ -1184,11 +1575,13 @@ function renderAuthenticatedUI(authResult) {
     }
 
     clearLoginNotice();
+    clearAuthFlowStatus();
     displayTokenDetails({
         access_token: accessToken,
         id_token: idToken,
         refresh_token: "",
     });
+    renderFlowCompletionSummary();
     renderComprehensiveUserProfile({
         accessToken,
         idToken,
@@ -1213,9 +1606,11 @@ function showHomePage() {
     if (loginDiv) loginDiv.style.display   = "none";
     if (authDiv)  authDiv.style.display    = "none";
     _setNavActive("home");
-    // Show/hide Sign In button
-    const signInBtn = document.getElementById("navSignInBtn");
-    if (signInBtn) signInBtn.style.display = hasAnyActiveSession() ? "none" : "inline-block";
+    applyUserModeUI();
+    openDocTab(getActiveDocTab(), { scroll: false });
+    renderGuidedJourney();
+    clearAuthFlowStatus();
+    setNavbarAuthCtas(hasAnyActiveSession());
 }
 
 function showLoginPage() {
@@ -1227,8 +1622,7 @@ function showLoginPage() {
         if (loginDiv) loginDiv.style.display   = "none";
         if (authDiv)  authDiv.style.display    = "block";
         _setNavActive("");
-        const signInBtn = document.getElementById("navSignInBtn");
-        if (signInBtn) signInBtn.style.display = "none";
+        setNavbarAuthCtas(true);
         return;
     }
 
@@ -1238,6 +1632,8 @@ function showLoginPage() {
     if (homeDiv)  homeDiv.style.display    = "none";
     if (loginDiv) loginDiv.style.display   = "block";
     if (authDiv)  authDiv.style.display    = "none";
+    clearAuthFlowStatus();
+    setNavbarAuthCtas(false);
     _setNavActive("login");
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1248,15 +1644,38 @@ function hasAnyActiveSession() {
     return Boolean(nativeSession || msalSession);
 }
 
+function setNavbarAuthCtas(isAuthenticated) {
+    const signInDesktop = document.getElementById("navSignInBtn");
+    const signInMobile = document.getElementById("navSignInBtnMobile");
+    const exploreDesktop = document.getElementById("navExploreApiBtn");
+    const exploreMobile = document.getElementById("navExploreApiBtnMobile");
+
+    if (signInDesktop) {
+        signInDesktop.style.display = isAuthenticated ? "none" : "inline-block";
+    }
+    if (signInMobile) {
+        signInMobile.classList.toggle("is-hidden", isAuthenticated);
+    }
+    if (exploreDesktop) {
+        exploreDesktop.classList.toggle("is-hidden", !isAuthenticated);
+        exploreDesktop.style.display = isAuthenticated ? "inline-block" : "none";
+    }
+    if (exploreMobile) {
+        exploreMobile.classList.toggle("is-hidden", !isAuthenticated);
+    }
+}
+
 function scrollToDocsSection() {
     const homeDiv = document.getElementById("homeDiv");
     if (!homeDiv || homeDiv.style.display === "none") {
         showHomePage();
         setTimeout(() => {
+            openDocTab("native");
             const target = document.getElementById("docs-overview");
             if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 100);
     } else {
+        openDocTab("native", { scroll: false });
         const target = document.getElementById("docs-overview");
         if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -1286,6 +1705,7 @@ function _setNavActive(section) {
 function renderUnauthenticatedUI() {
     clearTokenLifetimeTimers();
     clearRefreshScheduleIndicator();
+    clearAuthFlowStatus();
     document.getElementById("authenticatedDiv").style.display = "none";
     document.getElementById("loginDiv").style.display = "block";
     const homeDiv = document.getElementById("homeDiv");
@@ -1294,8 +1714,7 @@ function renderUnauthenticatedUI() {
     renderOperatorSearchHistory();
     applyDemoModeState();
     _setNavActive("login");
-    const signInBtn = document.getElementById("navSignInBtn");
-    if (signInBtn) signInBtn.style.display = "none";
+    setNavbarAuthCtas(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -1317,10 +1736,11 @@ function restoreSession() {
         document.getElementById("loginDiv").style.display = "none";
         const _homeRestore = document.getElementById("homeDiv"); if (_homeRestore) _homeRestore.style.display = "none";
         _setNavActive("");
-        const _signInRestore = document.getElementById("navSignInBtn"); if (_signInRestore) _signInRestore.style.display = "none";
+        setNavbarAuthCtas(true);
         document.getElementById("firstName").innerText = decodedToken.name || "User";
         displayTokenDetails(tokens);
         applyDemoModeState();
+        renderFlowCompletionSummary();
         renderComprehensiveUserProfile({
             accessToken: tokens.access_token,
             idToken: tokens.id_token,

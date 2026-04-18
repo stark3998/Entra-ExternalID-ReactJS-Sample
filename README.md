@@ -21,6 +21,7 @@ It also demonstrates self-service sign-up, self-service password reset, MFA chal
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Run Both Services Together](#run-both-services-together)
+- [Docker Deployment](#docker-deployment)
 - [Configuration](#configuration)
 - [Phase 1 Operator Guide](#phase-1-operator-guide)
 - [Smoke Tests](#smoke-tests)
@@ -546,6 +547,60 @@ Open:
 - App: `http://localhost:8080`
 - Proxy: `http://localhost:3001`
 - Settings page: `http://localhost:8080/settings.html`
+
+## Docker Deployment
+
+This repo now includes a single-container setup that runs both processes automatically:
+
+- Frontend/app server on port `8080`
+- CORS proxy on port `3001`
+
+### Option 1: Docker Compose (Recommended)
+
+```bash
+docker compose up --build
+```
+
+Run detached:
+
+```bash
+docker compose up -d --build
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+### Option 2: Docker CLI
+
+Build image:
+
+```bash
+docker build -t external-id-demo:latest .
+```
+
+Run container:
+
+```bash
+docker run --rm -p 8080:8080 -p 3001:3001 --name external-id-demo external-id-demo:latest
+```
+
+### Environment Variables
+
+`docker-compose.yml` loads runtime values from your local `.env` file using `env_file`.
+
+To customize tenant/app values, update `.env` (or create one from `.env.example`) before running compose. Common values:
+
+- `CLIENT_ID`
+- `TENANT_ID`
+- `TENANT_SUBDOMAIN`
+- `PUBLIC_BASE_API_URL` (default: `http://localhost:3001/api`)
+
+### Why two exposed ports?
+
+The browser calls the proxy URL directly, so the proxy must be reachable from your host. This is why both `8080` (app) and `3001` (proxy) are published by default.
 
 ## Configuration
 

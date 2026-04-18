@@ -1,0 +1,22 @@
+services:
+  external-id-demo:
+    container_name: external-id-demo
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      APP_PORT: ${APP_PORT:?APP_PORT must be set in .env}
+      CORS_PORT: ${CORS_PORT:?CORS_PORT must be set in .env}
+      CLIENT_ID: ${CLIENT_ID:?CLIENT_ID must be set in .env}
+      TENANT_ID: ${TENANT_ID:?TENANT_ID must be set in .env}
+      TENANT_SUBDOMAIN: ${TENANT_SUBDOMAIN:?TENANT_SUBDOMAIN must be set in .env}
+      ENTRA_AUTHORITY_HOST: ${ENTRA_AUTHORITY_HOST:?ENTRA_AUTHORITY_HOST must be set in .env}
+      LOCAL_API_PATH: ${LOCAL_API_PATH:?LOCAL_API_PATH must be set in .env}
+      PUBLIC_BASE_API_URL: ${PUBLIC_BASE_API_URL:?PUBLIC_BASE_API_URL must be set in .env}
+    ports:
+      - "${APP_PORT:?APP_PORT must be set in .env}:${APP_PORT:?APP_PORT must be set in .env}"
+      - "${CORS_PORT:?CORS_PORT must be set in .env}:${CORS_PORT:?CORS_PORT must be set in .env}"
+    restart: unless-stopped
