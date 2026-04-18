@@ -2,7 +2,7 @@
 
 const express = require('express');
 const path = require('path');
-const proxyConfig = require('./proxy.config');
+const proxyConfig = require('../config/proxy.config');
 
 const app = express();
 const port = Number(process.env.APP_PORT || 8080);

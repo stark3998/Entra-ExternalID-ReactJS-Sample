@@ -3,7 +3,7 @@
 const http = require("http");
 const https = require("https");
 const { URL } = require("url");
-const proxyConfig = require("./proxy.config.js");
+const proxyConfig = require("../config/proxy.config.js");
 
 /**
  * ==========================

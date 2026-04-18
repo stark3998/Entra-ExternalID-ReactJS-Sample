@@ -28,10 +28,10 @@ The plan is organized in three phases:
 ### 1.1 Sign-Up Flow (New Capability)
 
 **Files to Modify/Create:**
-- `public/nativeAuth.js` – Add sign-up handlers and flow orchestration
+- `public/js/nativeAuth.js` – Add sign-up handlers and flow orchestration
 - `public/index.html` – Add sign-up UI tab/dialog and controls
-- `public/config.js` – Add sign-up endpoints
-- `public/ui.js` – Add sign-up success rendering
+- `public/js/config.js` – Add sign-up endpoints
+- `public/js/ui.js` – Add sign-up success rendering
 
 **Spec:**
 1. **signUpStart()**: POST to `/signup/v1.0/start` with `client_id`, `username`, `challenge_type`, and optionally `password` plus required `attributes`
@@ -75,10 +75,10 @@ The plan is organized in three phases:
 ### 1.2 SSPR (Self-Service Password Reset) Flow (New Capability)
 
 **Files to Modify/Create:**
-- `public/nativeAuth.js` – Add SSPR handlers
+- `public/js/nativeAuth.js` – Add SSPR handlers
 - `public/index.html` – Add "Forgot Password?" link and SSPR dialog
-- `public/config.js` – Add SSPR endpoints
-- `public/ui.js` – Add SSPR completion rendering
+- `public/js/config.js` – Add SSPR endpoints
+- `public/js/ui.js` – Add SSPR completion rendering
 
 **Spec:**
 1. **resetPasswordStart()**: POST to `/resetpassword/v1.0/start` with `client_id`, `username`, and `challenge_type=oob redirect`
@@ -124,10 +124,10 @@ The plan is organized in three phases:
 ### 1.3 Token & Session Security
 
 **Files to Modify:**
-- `public/config.js` – Expand cache options
-- `public/msalAuth.js` – Switch to sessionStorage for MSAL cache
-- `public/ui.js` – Add demo mode toggle controlling token visibility
-- `public/app.css` – Add demo mode label/warning
+- `public/js/config.js` – Expand cache options
+- `public/js/msalAuth.js` – Switch to sessionStorage for MSAL cache
+- `public/js/ui.js` – Add demo mode toggle controlling token visibility
+- `public/css/app.css` – Add demo mode label/warning
 
 **Changes:**
 1. **MSAL cache**: Move from `localStorage` (persistent) to `sessionStorage` (single tab/session only)
@@ -146,13 +146,13 @@ The plan is organized in three phases:
 
 **Code Locations:**
 ```javascript
-// In public/msalAuth.js, change:
+// In public/js/msalAuth.js, change:
 cache: {
   cacheLocation: "sessionStorage", // was "localStorage"
   storeAuthStateInCookie: false,
 }
 
-// In public/ui.js, add:
+// In public/js/ui.js, add:
 function isDemoModeEnabled() {
   return sessionStorage.getItem("demoMode") === "true";
 }
@@ -171,11 +171,11 @@ function isDemoModeEnabled() {
 ### 1.4 Error Handling & Operator Diagnostics
 
 **Files to Modify/Create:**
-- `public/httpClient.js` – Enhance with error capture and trace IDs
-- `public/nativeAuth.js` – Capture all error responses with context
-- `public/ui.js` – Add error panel with rich diagnostics
+- `public/js/httpClient.js` – Enhance with error capture and trace IDs
+- `public/js/nativeAuth.js` – Capture all error responses with context
+- `public/js/ui.js` – Add error panel with rich diagnostics
 - `public/index.html` – Add error panel dialog
-- `public/app.css` – Style error panel
+- `public/css/app.css` – Style error panel
 
 **Error Panel Fields:**
 ```
@@ -246,7 +246,7 @@ function isDemoModeEnabled() {
 
 Implement Phase 1 in the following order. This sequence is dependency-aware, minimizes rework, and keeps the UI changes behind stable API/config contracts.
 
-#### Step 1: `public/config.js`
+#### Step 1: `public/js/config.js`
 
 **Why first**
 - All Native Auth and Graph-facing flows depend on endpoint constants, scopes, feature flags, and cache settings defined here.
@@ -276,10 +276,10 @@ Implement Phase 1 in the following order. This sequence is dependency-aware, min
 - All downstream files should read from a single configuration surface and not hard-code URLs or scopes.
 
 **Done when**
-- No endpoint URL is hard-coded in `public/nativeAuth.js` or `public/ui.js`.
+- No endpoint URL is hard-coded in `public/js/nativeAuth.js` or `public/js/ui.js`.
 - Config clearly separates native auth, Graph self-service, and operator/beta concerns.
 
-#### Step 2: `public/httpClient.js`
+#### Step 2: `public/js/httpClient.js`
 
 **Why second**
 - Every auth flow and Graph call needs a consistent HTTP wrapper before new features are added.
@@ -312,7 +312,7 @@ Implement Phase 1 in the following order. This sequence is dependency-aware, min
 - Native auth callers can throw one consistent error shape.
 - Error panel requirements can be fulfilled without additional parsing logic in every caller.
 
-#### Step 3: `public/nativeAuth.js`
+#### Step 3: `public/js/nativeAuth.js`
 
 **Why third**
 - This file owns the core orchestration logic and should be refactored only after config and transport are stable.
@@ -345,7 +345,7 @@ Implement Phase 1 in the following order. This sequence is dependency-aware, min
 - No flow depends on repurposing another flow’s continuation-token state.
 - The reset-password flow follows `start -> challenge -> continue -> submit -> poll_completion -> optional token`.
 
-#### Step 4: `public/ui.js`
+#### Step 4: `public/js/ui.js`
 
 **Why fourth**
 - Once transport and flow orchestration are stable, wire the rendering and session-state logic.
@@ -400,7 +400,7 @@ Implement Phase 1 in the following order. This sequence is dependency-aware, min
 - No JS feature depends on dynamically creating core modal structure at runtime.
 - All new flows have dedicated DOM anchors.
 
-#### Step 6: `public/app.css`
+#### Step 6: `public/css/app.css`
 
 **Why sixth**
 - Style after the DOM structure is stable.
@@ -419,7 +419,7 @@ Implement Phase 1 in the following order. This sequence is dependency-aware, min
 - All new controls feel visually integrated with the existing app.
 - Diagnostics content is readable without layout overflow.
 
-#### Step 7: `public/msalAuth.js`
+#### Step 7: `public/js/msalAuth.js`
 
 **Why seventh**
 - This is a focused security/config cleanup step after the main native-auth flows are in place.
@@ -514,18 +514,18 @@ Implement Phase 1 in the following order. This sequence is dependency-aware, min
 Use these slices even if you do not create git commits for each one.
 
 1. **Config and HTTP foundation**
-   - `public/config.js`
-   - `public/httpClient.js`
+   - `public/js/config.js`
+   - `public/js/httpClient.js`
    - `server.js`
    - `.env.example`
 2. **Sign-up and SSPR orchestration**
-   - `public/nativeAuth.js`
+   - `public/js/nativeAuth.js`
 3. **Phase 1 UI surfaces**
-   - `public/ui.js`
+   - `public/js/ui.js`
    - `public/index.html`
-   - `public/app.css`
+   - `public/css/app.css`
 4. **MSAL security alignment**
-   - `public/msalAuth.js`
+   - `public/js/msalAuth.js`
 5. **Validation and docs**
    - `tests/phase1.smoke.test.js`
    - `README.md`
@@ -574,8 +574,8 @@ Phase 1 is complete only when all of the following are true:
 ### 2.1 Token Lifetime & Expiration Tracking
 
 **Files to Modify:**
-- `public/ui.js` – Add token expiration logic
-- `public/app.css` – Add countdown timer styles
+- `public/js/ui.js` – Add token expiration logic
+- `public/css/app.css` – Add countdown timer styles
 
 **Implementation:**
 At login, for each token:
@@ -621,9 +621,9 @@ function startExpirationTimer(tokenId, token) {
 ### 2.2 Claim Provenance & Diff Viewer
 
 **Files to Modify:**
-- `public/ui.js` – Add claim source tracking and diff logic
+- `public/js/ui.js` – Add claim source tracking and diff logic
 - `public/index.html` – Add provenance viewer UI
-- `public/app.css` – Style provenance cards
+- `public/css/app.css` – Style provenance cards
 
 **Implementation:**
 After parsing id_token, access_token, and account claims, create a map:
@@ -661,9 +661,9 @@ const claimProvenance = {
 ### 2.3 Group, Role & Entitlement Summary
 
 **Files to Modify:**
-- `public/ui.js` – Add group/role extraction
+- `public/js/ui.js` – Add group/role extraction
 - `public/index.html` – Add groups/roles section
-- `public/app.css` – Style groups/roles cards
+- `public/css/app.css` – Style groups/roles cards
 
 **Implementation:**
 Extract and summarize:
@@ -699,9 +699,9 @@ Extract and summarize:
 ### 2.4 Graph API Integration: Profile & Session Status
 
 **Files to Modify/Create:**
-- `public/ui.js` – Add Graph self-service and operator data clients
+- `public/js/ui.js` – Add Graph self-service and operator data clients
 - `public/index.html` – Add Graph actions, operator mode, and reporting sections
-- `public/config.js` – Add Graph scopes, beta flags, and operator-mode config
+- `public/js/config.js` – Add Graph scopes, beta flags, and operator-mode config
 
 **Graph API model:**
 This app should split Graph functionality into two lanes.
@@ -813,9 +813,9 @@ async function getAdminIdentityDetail(operatorToken, userId) {
 ### 2.5 Policy Simulation Packs (Pre-Configured Scenarios)
 
 **Files to Modify/Create:**
-- `public/config.js` – Add scenario definitions
+- `public/js/config.js` – Add scenario definitions
 - `public/settings.html` – Add scenario selector
-- `public/ui.js` – Add scenario apply logic
+- `public/js/ui.js` – Add scenario apply logic
 - `.env.example` – Add POLICY_SCENARIO env var
 
 **Scenario Definitions:**
@@ -893,8 +893,8 @@ const POLICY_SCENARIOS = {
 ### 2.6 Capability Negotiation Controls
 
 **Files to Modify:**
-- `public/nativeAuth.js` – Make capabilities configurable
-- `public/config.js` – Add capabilities override
+- `public/js/nativeAuth.js` – Make capabilities configurable
+- `public/js/config.js` – Add capabilities override
 - `public/settings.html` – Add capabilities toggle UI
 
 **Implementation:**
@@ -937,7 +937,7 @@ function getCapabilities() {
 ### 2.7 Update Postman Collection with Scenarios
 
 **Files to Modify:**
-- `public/EEID Native Auth.postman_collection.json` – Add scenario folders
+- `public/assets/EEID Native Auth.postman_collection.json` – Add scenario folders
 
 **Postman Structure:**
 ```
@@ -1043,10 +1043,10 @@ CORS_ORIGINS=http://localhost:8080,http://localhost:3001,https://demo.codexjay.c
 ### 3.2 Flow Timeline & Audit Trail
 
 **Files to Modify/Create:**
-- `public/httpClient.js` – Enhanced logging
-- `public/ui.js` – Add timeline panel
+- `public/js/httpClient.js` – Enhanced logging
+- `public/js/ui.js` – Add timeline panel
 - `public/index.html` – Add timeline dialog
-- `public/app.css` – Style timeline
+- `public/css/app.css` – Style timeline
 
 **Implementation:**
 Log every API call:
@@ -1234,9 +1234,9 @@ ENABLE_ERROR_PANEL=false
 
 **Files to Modify/Create:**
 - `public/index.html` – Add guided demo modal
-- `public/ui.js` – Add guided tour logic
-- `public/app.css` – Style guided tour
-- `public/config.js` – Add guided tour config
+- `public/js/ui.js` – Add guided tour logic
+- `public/css/app.css` – Style guided tour
+- `public/js/config.js` – Add guided tour config
 
 **Demo Scenario (Example):**
 ```
@@ -1544,8 +1544,8 @@ This section expands the roadmap into concrete API surfaces, payload contracts, 
   - `methods[]` with method identifiers and challenge channels
 
 **Implementation notes for this repo**
-- Keep `public/nativeAuth.js` as the orchestration layer only.
-- Move request building and response normalization into `public/httpClient.js` or a small `nativeAuthClient` wrapper.
+- Keep `public/js/nativeAuth.js` as the orchestration layer only.
+- Move request building and response normalization into `public/js/httpClient.js` or a small `nativeAuthClient` wrapper.
 - Normalize all auth responses into a single internal shape:
 
 ```javascript
@@ -1708,7 +1708,7 @@ Use the native auth SSPR flow as its own orchestration branch instead of mixing 
   - when `status=succeeded`, that continuation token can be used to obtain tokens from `/oauth2/v2.0/token`
 
 **Implementation guidance**
-- Create a dedicated `resetPasswordFlow` object in `public/nativeAuth.js`.
+- Create a dedicated `resetPasswordFlow` object in `public/js/nativeAuth.js`.
 - Reuse the same OOB entry UI but give SSPR its own error catalog and retry semantics.
 - Add a distinct submit-and-poll phase instead of trying to complete reset in a single continue call.
 - Capture and surface:
@@ -1754,7 +1754,7 @@ Use `beta` only where it unlocks materially better operator visibility or admin 
 
 **`GET /v1.0/me/authentication/methods`**
 - Use for enrolled factor inventory
-- Map `@odata.type` to friendly cards in `public/ui.js`
+- Map `@odata.type` to friendly cards in `public/js/ui.js`
 - Show created time where available
 
 **`GET /v1.0/me/authentication/temporaryAccessPassMethods`**
@@ -1839,11 +1839,11 @@ Do not overload one access token for all three purposes.
 #### C.2 Client modules
 
 Refactor into these service modules:
-- `public/nativeAuthClient.js`
-- `public/graphSelfServiceClient.js`
-- `public/graphOperatorClient.js`
-- `public/errorDiagnostics.js`
-- `public/flowTimeline.js`
+- `public/js/nativeAuthClient.js`
+- `public/js/graphSelfServiceClient.js`
+- `public/js/graphOperatorClient.js`
+- `public/js/errorDiagnostics.js`
+- `public/js/flowTimeline.js`
 
 #### C.3 UI surfaces
 
@@ -1903,37 +1903,37 @@ Keep the consent plan explicit in the implementation.
 ## Appendix: File-by-File Checklist
 
 ### Phase 1
-- [ ] `public/nativeAuth.js` – Add sign-up, SSPR handlers
+- [ ] `public/js/nativeAuth.js` – Add sign-up, SSPR handlers
 - [ ] `public/index.html` – Add sign-up/SSPR UI tabs
-- [ ] `public/config.js` – Add sign-up/SSPR endpoints
-- [ ] `public/ui.js` – Error panel, demo mode toggle
-- [ ] `public/httpClient.js` – Enhance error capture + trace IDs
-- [ ] `public/app.css` – Error panel + demo mode styles
-- [ ] `public/msalAuth.js` – Switch to sessionStorage cache
+- [ ] `public/js/config.js` – Add sign-up/SSPR endpoints
+- [ ] `public/js/ui.js` – Error panel, demo mode toggle
+- [ ] `public/js/httpClient.js` – Enhance error capture + trace IDs
+- [ ] `public/css/app.css` – Error panel + demo mode styles
+- [ ] `public/js/msalAuth.js` – Switch to sessionStorage cache
 - [ ] `server.js` – Add config validation
 - [ ] `.env.example` – Add demo mode, CORS config
 - [ ] `tests/phase1.smoke.test.js` – Basic smoke tests
 
 ### Phase 2
-- [ ] `public/ui.js` – Token lifetime, claim diff, groups/roles
+- [ ] `public/js/ui.js` – Token lifetime, claim diff, groups/roles
 - [ ] `public/index.html` – Provenance, groups sections
-- [ ] `public/app.css` – Provenance + groups styles
-- [ ] `public/config.js` – Add Graph scopes + scenarios
+- [ ] `public/css/app.css` – Provenance + groups styles
+- [ ] `public/js/config.js` – Add Graph scopes + scenarios
 - [ ] `public/settings.html` – Scenario selector, capability toggles
-- [ ] `public/EEID Native Auth.postman_collection.json` – Scenario folders
+- [ ] `public/assets/EEID Native Auth.postman_collection.json` – Scenario folders
 - [ ] `README.md` – Update with all features
 
 ### Phase 3
 - [ ] `cors.js` – Allowlist-based CORS
 - [ ] `cors_prod.js` – Production profile
 - [ ] `proxy.config.js` – CORS config section
-- [ ] `public/ui.js` – Flow timeline panel
+- [ ] `public/js/ui.js` – Flow timeline panel
 - [ ] `public/index.html` – Timeline dialog
-- [ ] `public/app.css` – Timeline styles
+- [ ] `public/css/app.css` – Timeline styles
 - [ ] `server.js` – Startup validation
 - [ ] `.env.local`, `.env.secure`, `.env.prod` – Profile configs
 - [ ] `package.json` – Profile-aware scripts
-- [ ] `public/ui.js` – Guided demo mode
+- [ ] `public/js/ui.js` – Guided demo mode
 - [ ] `tests/integration.test.js` – Full test suite
 - [ ] `.github/workflows/test.yml` – CI/CD
 - [ ] `FLOWS.md`, `SCENARIOS.md`, `OPERATOR_GUIDE.md` – Documentation

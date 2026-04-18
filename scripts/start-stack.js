@@ -6,8 +6,8 @@ const { getTargetPorts, killPorts } = require("./port-utils");
 const plainMode = process.argv.includes("--plain");
 
 const services = [
-  { name: "APP", color: "\x1b[36m", command: process.execPath, args: ["--env-file-if-exists=.env", "server.js"] },
-  { name: "CORS", color: "\x1b[35m", command: process.execPath, args: ["--env-file-if-exists=.env", "cors.js"] },
+  { name: "APP", color: "\x1b[36m", command: process.execPath, args: ["--env-file-if-exists=.env", "services/server.js"] },
+  { name: "CORS", color: "\x1b[35m", command: process.execPath, args: ["--env-file-if-exists=.env", "services/cors.js"] },
 ];
 
 const children = [];

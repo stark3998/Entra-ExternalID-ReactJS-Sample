@@ -46,7 +46,7 @@ Important platform notes from the reference:
 
 - Native Auth APIs are designed for external tenants.
 - Native Auth endpoints do not support browser CORS directly.
-- For this reason, this repo uses [cors.js](cors.js) as a local forwarding proxy.
+- For this reason, this repo uses [services/cors.js](services/cors.js) as a local forwarding proxy.
 - All Native Auth requests are sent as `application/x-www-form-urlencoded`.
 
 ### API-by-API Cheat Sheet
@@ -146,8 +146,8 @@ When `/oauth2/v2.0/token` returns `invalid_grant` with `suberror=mfa_required`:
 
 Repo mapping:
 
-- Flow orchestration: [public/nativeAuth.js](public/nativeAuth.js)
-- Method rendering and dialogs: [public/ui.js](public/ui.js)
+- Flow orchestration: [public/js/nativeAuth.js](public/js/nativeAuth.js)
+- Method rendering and dialogs: [public/js/ui.js](public/js/ui.js)
 
 ### Strong Method Registration Branch
 
@@ -160,8 +160,8 @@ When `/oauth2/v2.0/token` indicates `suberror=registration_required`:
 
 Repo mapping:
 
-- Registration calls: [public/config.js](public/config.js)
-- Registration flow handling: [public/nativeAuth.js](public/nativeAuth.js)
+- Registration calls: [public/js/config.js](public/js/config.js)
+- Registration flow handling: [public/js/nativeAuth.js](public/js/nativeAuth.js)
 
 ### Capabilities and Fallback
 
@@ -208,7 +208,7 @@ continuation-token and redirect-fallback patterns.
 
 Collection file:
 
-- [public/EEID Native Auth.postman_collection.json](public/EEID%20Native%20Auth.postman_collection.json)
+- [public/assets/EEID Native Auth.postman_collection.json](public/assets/EEID%20Native%20Auth.postman_collection.json)
 
 This collection provides a manual, request-by-request Native Auth test harness
 for email/password sign-in and MFA completion against Entra External ID
@@ -338,10 +338,14 @@ Operational implication:
 ## Project Structure
 
 ```text
-server.js                # Express static server (port 8080)
-cors.js                  # Dev proxy (port 3001)
-cors_prod.js             # Production proxy variant
-proxy.config.js          # Proxy target configuration
+services/
+  server.js              # Express static server (port 8080)
+  cors.js                # Dev proxy (port 3001)
+  cors_prod.js           # Production proxy variant
+config/
+  proxy.config.js        # Proxy target configuration
+archive/
+  cors_old.js            # Legacy proxy implementation (reference only)
 package.json
 public/
   index.html             # Main app UI
@@ -467,8 +471,8 @@ This is a contract-level smoke suite, not a full browser end-to-end harness. It 
 
 Phase 2 has started by separating Graph code into two lanes:
 
-- Self-service delegated client: [public/graphSelfServiceClient.js](public/graphSelfServiceClient.js)
-- Operator beta client: [public/graphOperatorClient.js](public/graphOperatorClient.js)
+- Self-service delegated client: [public/js/graphSelfServiceClient.js](public/js/graphSelfServiceClient.js)
+- Operator beta client: [public/js/graphOperatorClient.js](public/js/graphOperatorClient.js)
 
 Rules:
 
@@ -480,8 +484,8 @@ Rules:
 
 This repo needs two local processes during development:
 
-- App server (`server.js`) on `http://localhost:8080`
-- CORS proxy (`cors.js`) on `http://localhost:3001`
+- App server (`services/server.js`) on `http://localhost:8080`
+- CORS proxy (`services/cors.js`) on `http://localhost:3001`
 
 Use one of the options below.
 
@@ -614,7 +618,7 @@ Configuration is template-driven through environment variables.
 copy .env.example .env
 ```
 
-The frontend receives runtime config via `GET /app-config.js` from `server.js`, so onboarding does not require code edits.
+The frontend receives runtime config via `GET /app-config.js` from `services/server.js`, so onboarding does not require code edits.
 
 You can view the effective configured environment values in the built-in settings page:
 
@@ -656,12 +660,12 @@ This gives deterministic local behavior for demos and reduces mistakes from forg
 
 ### Localization
 
-UI text is centralized in `public/i18n.js` and loaded at runtime.
+UI text is centralized in `public/js/i18n.js` and loaded at runtime.
 
 - Default locale comes from `LOCALE` in `.env`
 - On successful login, the app attempts to read locale claims from Entra tokens (`preferred_language`, `locale`, `ui_locales`) and applies them dynamically
 - Users can switch locale at runtime via `setLocale('en')` or `setLocale('es')` in the browser console
-- Add new languages by extending the `translations` object in `public/i18n.js`
+- Add new languages by extending the `translations` object in `public/js/i18n.js`
 
 ### Themeing
 
@@ -675,22 +679,22 @@ The UI supports runtime theme presets for demos.
 
 ### Runtime Components
 
-- [`server.js`](server.js): Express host for static assets and runtime config endpoints (`/app-config.js`, `/settings-config.json`).
-- [`cors.js`](cors.js): Development CORS proxy that forwards local `/api` calls to Entra tenant endpoints.
-- [`cors_prod.js`](cors_prod.js): Stricter production-oriented CORS proxy variant with origin allowlist behavior.
-- [`proxy.config.js`](proxy.config.js): Derives proxy target and ports from `.env` with sensible defaults.
+- [`services/server.js`](services/server.js): Express host for static assets and runtime config endpoints (`/app-config.js`, `/settings-config.json`).
+- [`services/cors.js`](services/cors.js): Development CORS proxy that forwards local `/api` calls to Entra tenant endpoints.
+- [`services/cors_prod.js`](services/cors_prod.js): Stricter production-oriented CORS proxy variant with origin allowlist behavior.
+- [`config/proxy.config.js`](config/proxy.config.js): Derives proxy target and ports from `.env` with sensible defaults.
 
 ### Frontend Composition
 
 - [`public/index.html`](public/index.html): Main sign-in shell, auth panels, dialogs, and authenticated dashboard.
-- [`public/app.css`](public/app.css): Global styling, responsive layout, theme variables, settings-page styles.
-- [`public/app.js`](public/app.js): App bootstrap, theme initialization, session restore, and logout orchestration.
-- [`public/config.js`](public/config.js): Resolves runtime config from `window.__APP_CONFIG__` into MSAL/native auth settings.
-- [`public/httpClient.js`](public/httpClient.js): Shared HTTP request helpers.
-- [`public/nativeAuth.js`](public/nativeAuth.js): Native auth and MFA challenge/registration logic.
-- [`public/msalAuth.js`](public/msalAuth.js): Popup and redirect auth integration via MSAL Browser.
-- [`public/ui.js`](public/ui.js): Session token persistence, token display rendering, and auth method UI behavior.
-- [`public/i18n.js`](public/i18n.js): Client-side localization dictionary and translation application helper.
+- [`public/css/app.css`](public/css/app.css): Global styling, responsive layout, theme variables, settings-page styles.
+- [`public/js/app.js`](public/js/app.js): App bootstrap, theme initialization, session restore, and logout orchestration.
+- [`public/js/config.js`](public/js/config.js): Resolves runtime config from `window.__APP_CONFIG__` into MSAL/native auth settings.
+- [`public/js/httpClient.js`](public/js/httpClient.js): Shared HTTP request helpers.
+- [`public/js/nativeAuth.js`](public/js/nativeAuth.js): Native auth and MFA challenge/registration logic.
+- [`public/js/msalAuth.js`](public/js/msalAuth.js): Popup and redirect auth integration via MSAL Browser.
+- [`public/js/ui.js`](public/js/ui.js): Session token persistence, token display rendering, and auth method UI behavior.
+- [`public/js/i18n.js`](public/js/i18n.js): Client-side localization dictionary and translation application helper.
 - [`public/settings.html`](public/settings.html): Settings UI showing effective environment-driven values grouped by section.
 - [`public/redirect.html`](public/redirect.html): Redirect callback page for MSAL redirect flow.
 
@@ -706,11 +710,11 @@ The UI supports runtime theme presets for demos.
 
 ### Request/Config Flow
 
-1. Browser requests `GET /app-config.js` from [`server.js`](server.js).
+1. Browser requests `GET /app-config.js` from [`services/server.js`](services/server.js).
 2. Runtime config is injected into `window.__APP_CONFIG__`.
-3. [`public/config.js`](public/config.js) builds MSAL/native endpoints from runtime values.
+3. [`public/js/config.js`](public/js/config.js) builds MSAL/native endpoints from runtime values.
 4. Frontend sends native auth traffic to `PUBLIC_BASE_API_URL` (`/api` on local CORS proxy).
-5. [`cors.js`](cors.js) forwards to configured Entra tenant endpoints.
+5. [`services/cors.js`](services/cors.js) forwards to configured Entra tenant endpoints.
 6. Settings page requests `GET /settings-config.json` to display effective env values.
 
 ## Session Behavior
@@ -741,7 +745,7 @@ Logout behavior:
 2. Fill in `CLIENT_ID`, `TENANT_ID`, and `TENANT_SUBDOMAIN`
 3. Optionally set `PROXY_TARGET` if your endpoint is custom
 4. Run `npm run start:env` and `npm run cors:env`
-5. (Optional) adjust branding copy/theme in `public/index.html` and `public/app.css`
+5. (Optional) adjust branding copy/theme in `public/index.html` and `public/css/app.css`
 
 ## Token Refresh Strategy
 

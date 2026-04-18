@@ -1,7 +1,7 @@
 const http = require("http");
 const https = require("https");
 const url = require("url");
-const proxyConfig = require("./proxy.config.js");
+const proxyConfig = require("../config/proxy.config.js");
 
 http
 .createServer((req, res) => {

@@ -117,7 +117,7 @@ function evaluate(sandbox, expression) {
 
 test('config exposes Phase 1 native auth endpoints and Graph split', () => {
   const sandbox = createSandbox({ __APP_CONFIG__: {} });
-  runScript(sandbox, 'public/config.js');
+  runScript(sandbox, 'public/js/config.js');
 
   const env = evaluate(sandbox, 'ENV');
   const selfServiceEndpoints = evaluate(sandbox, 'GRAPH_SELF_SERVICE_ENDPOINTS');
@@ -139,9 +139,9 @@ test('native auth enforces required sign-up attributes from runtime config', () 
     setLoginNotice() {},
     showErrorDiagnostics() {},
   });
-  runScript(sandbox, 'public/config.js');
-  runScript(sandbox, 'public/i18n.js');
-  runScript(sandbox, 'public/nativeAuth.js');
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/i18n.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
 
   const attributes = sandbox.mergeSignUpAttributes('{"postalCode":"98052"}', 'Ada Lovelace');
   assert.deepEqual(Array.from(sandbox.getMissingRequiredSignUpAttributes(attributes)), ['city']);
@@ -155,8 +155,8 @@ test('sign-up start posts password and attributes to the signup start endpoint',
       return { continuation_token: 'next-token' };
     },
   });
-  runScript(sandbox, 'public/config.js');
-  runScript(sandbox, 'public/nativeAuth.js');
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
   const env = evaluate(sandbox, 'ENV');
 
   const result = await sandbox.signUpStart('user@contoso.com', 'P@ssword123!', { postalCode: '98052' });
@@ -185,9 +185,9 @@ test('reset password submit posts new_password and poll helper retries until suc
       return { continuation_token: 'noop' };
     },
   });
-  runScript(sandbox, 'public/config.js');
-  runScript(sandbox, 'public/i18n.js');
-  runScript(sandbox, 'public/nativeAuth.js');
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/i18n.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
 
   const submitRes = await sandbox.resetPasswordSubmit('submit-token', 'NewP@ssword123!');
   assert.equal(submitRes.poll_interval, 0);
@@ -198,8 +198,8 @@ test('reset password submit posts new_password and poll helper retries until suc
 
 test('demo mode toggle persists state in sessionStorage', () => {
   const sandbox = createSandbox();
-  runScript(sandbox, 'public/config.js');
-  runScript(sandbox, 'public/ui.js');
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/ui.js');
 
   sandbox.setDemoMode(true, { silent: true });
   assert.equal(sandbox.sessionStorage.getItem('nativeAuth_demo_mode'), 'true');
@@ -217,13 +217,13 @@ test('native auth refresh posts refresh_token grant to token endpoint', async ()
     showErrorDiagnostics() {},
   });
   sandbox.sessionStorage.setItem('nativeAuth_refresh_token', 'stored-refresh');
-  runScript(sandbox, 'public/config.js');
-  runScript(sandbox, 'public/i18n.js');
-  runScript(sandbox, 'public/ui.js');
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/i18n.js');
+  runScript(sandbox, 'public/js/ui.js');
   sandbox.renderNativeAuthenticatedUI = function renderNativeAuthenticatedUI(response) {
     sandbox.lastResponse = response;
   };
-  runScript(sandbox, 'public/nativeAuth.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
   const env = evaluate(sandbox, 'ENV');
 
   const result = await sandbox.refreshNativeAuthSession();
@@ -281,8 +281,8 @@ test('msal silent refresh acquires token silently and renders authenticated UI',
     getSessionInteractionType() { return 'popup'; },
     hasNativeSession() { return false; },
   });
-  runScript(sandbox, 'public/config.js');
-  runScript(sandbox, 'public/msalAuth.js');
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/msalAuth.js');
 
   await sandbox.refreshMsalSessionSilently({ account: { homeAccountId: 'acct-1', idTokenClaims: { name: 'User' } }, reason: 'test' });
   assert.equal(calls[0].scopes.includes('openid'), true);
