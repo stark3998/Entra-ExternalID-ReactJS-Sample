@@ -22,6 +22,7 @@ const config = {
     localApiPath: process.env.LOCAL_API_PATH || DEFAULTS.localApiPath,
     port: Number(process.env.CORS_PORT || DEFAULTS.corsPort),
     proxy: trimTrailingSlash(process.env.PROXY_TARGET || derivedProxyTarget),
+    allowInsecureTls: String(process.env.ALLOW_INSECURE_TLS || "false").toLowerCase() === "true",
     tenantSubdomain,
     tenantId,
     authorityHost,
