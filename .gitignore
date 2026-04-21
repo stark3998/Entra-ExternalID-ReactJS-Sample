@@ -21,3 +21,4 @@ yarn-error.log*
 .vscode/
 
 .served_app.js
+.env.old

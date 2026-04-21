@@ -1,7 +1,7 @@
 const DEFAULTS = {
-    tenantSubdomain: "TakedaIDtst",
-    tenantId: "23524f33-8f73-42a8-8246-12ab4e74d324",
-    clientId: "48a52df3-eefa-4c31-aacb-7cc69ebc2166",
+    tenantSubdomain: "codexjay",
+    tenantId: "78a77549-78e5-49f7-a870-9efbb0d32d91",
+    clientId: "90947f60-61f6-4c24-a192-8f5dcbf944ec",
     authorityHost: "ciamlogin.com",
     localApiPath: "/api",
     corsPort: 3001,
