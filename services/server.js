@@ -308,7 +308,10 @@ function getEffectiveConfig() {
   const signInChallengeType = process.env.NATIVE_AUTH_SIGNIN_CHALLENGE_TYPE || 'password oob redirect';
   const signUpChallengeType = process.env.NATIVE_AUTH_SIGNUP_CHALLENGE_TYPE || 'oob password redirect';
   const resetPasswordChallengeType = process.env.NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE || 'oob redirect';
+  const signupEnabledAttributes = process.env.SIGNUP_ENABLED_ATTRIBUTES || '';
   const signupRequiredAttributes = process.env.SIGNUP_REQUIRED_ATTRIBUTES || '';
+  const signupShowAdvancedJson = String(process.env.SIGNUP_SHOW_ADVANCED_JSON || 'false').toLowerCase() === 'true';
+  const signupFieldOverrides = process.env.SIGNUP_FIELD_OVERRIDES || '';
   const signupAttributeTemplate = process.env.SIGNUP_ATTRIBUTE_TEMPLATE || '';
   const graphProfileSelectFields = process.env.GRAPH_PROFILE_SELECT_FIELDS || '';
   const lookupConfig = getLookupConfig();
@@ -331,7 +334,10 @@ function getEffectiveConfig() {
       NATIVE_AUTH_SIGNIN_CHALLENGE_TYPE: signInChallengeType,
       NATIVE_AUTH_SIGNUP_CHALLENGE_TYPE: signUpChallengeType,
       NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE: resetPasswordChallengeType,
+      SIGNUP_ENABLED_ATTRIBUTES: signupEnabledAttributes,
       SIGNUP_REQUIRED_ATTRIBUTES: signupRequiredAttributes,
+      SIGNUP_SHOW_ADVANCED_JSON: signupShowAdvancedJson,
+      SIGNUP_FIELD_OVERRIDES: signupFieldOverrides,
       SIGNUP_ATTRIBUTE_TEMPLATE: signupAttributeTemplate,
       GRAPH_PROFILE_SELECT_FIELDS: graphProfileSelectFields,
       LOOKUP_RECOVERY_ENABLED: lookupConfig.enabled,
@@ -360,7 +366,10 @@ function getEffectiveConfig() {
       NATIVE_AUTH_SIGNIN_CHALLENGE_TYPE: signInChallengeType,
       NATIVE_AUTH_SIGNUP_CHALLENGE_TYPE: signUpChallengeType,
       NATIVE_AUTH_RESET_PASSWORD_CHALLENGE_TYPE: resetPasswordChallengeType,
+      SIGNUP_ENABLED_ATTRIBUTES: signupEnabledAttributes,
       SIGNUP_REQUIRED_ATTRIBUTES: signupRequiredAttributes,
+      SIGNUP_SHOW_ADVANCED_JSON: String(signupShowAdvancedJson),
+      SIGNUP_FIELD_OVERRIDES: signupFieldOverrides,
       SIGNUP_ATTRIBUTE_TEMPLATE: signupAttributeTemplate,
       GRAPH_PROFILE_SELECT_FIELDS: graphProfileSelectFields,
       LOGIN_SCOPES: loginScopes.join(','),

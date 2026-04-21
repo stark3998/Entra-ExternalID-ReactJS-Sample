@@ -162,6 +162,14 @@ async function login() {
 
 function mergeSignUpAttributes(rawJson, displayName) {
     let attributes = {};
+    let structuredAttributes = {};
+
+    if (displayName && typeof displayName === "object" && !Array.isArray(displayName)) {
+        structuredAttributes = { ...displayName };
+    } else if (displayName) {
+        structuredAttributes.displayName = displayName;
+    }
+
     if (rawJson) {
         try {
             attributes = JSON.parse(rawJson);
@@ -169,9 +177,12 @@ function mergeSignUpAttributes(rawJson, displayName) {
             throw new Error(tr("msg.invalidAttributes"));
         }
     }
-    if (displayName) {
-        attributes.displayName = displayName;
-    }
+
+    attributes = {
+        ...structuredAttributes,
+        ...attributes,
+    };
+
     return Object.keys(attributes).length > 0 ? attributes : null;
 }
 
@@ -197,6 +208,9 @@ function updateSignUpAttributeHint() {
     if (SIGNUP_CONFIG.attributeTemplate) {
         parts.push("Tenant attribute template loaded from runtime config.");
     }
+    if (SIGNUP_CONFIG.showAdvancedJson) {
+        parts.push(tr("signup.advancedHelp"));
+    }
 
     if (parts.length === 0) {
         hint.textContent = "";
@@ -206,6 +220,98 @@ function updateSignUpAttributeHint() {
 
     hint.textContent = parts.join(" ");
     hint.classList.remove("is-hidden");
+}
+
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getSignUpFieldsBySection() {
+    const grouped = new Map();
+    (SIGNUP_CONFIG.fields || []).forEach((field) => {
+        const section = field.section || "other";
+        if (!grouped.has(section)) {
+            grouped.set(section, []);
+        }
+        grouped.get(section).push(field);
+    });
+
+    return (SIGNUP_CONFIG.sectionOrder || []).map((section) => ({
+        section,
+        fields: grouped.get(section) || [],
+    })).filter((entry) => entry.fields.length > 0);
+}
+
+function renderSignUpFields() {
+    const container = document.getElementById("signUpDynamicFields");
+    if (!container) return;
+
+    const sections = getSignUpFieldsBySection();
+    container.innerHTML = sections.map(({ section, fields }) => {
+        const sectionTitle = tr(`signup.section.${section}`);
+        const fieldMarkup = fields.map((field) => {
+            const defaultValue = field.defaultValue || "";
+            const label = tr(field.labelKey);
+            const placeholder = tr(field.placeholderKey);
+            return `
+              <div class="form-group">
+                <label class="content-header" for="signUpField_${escapeHtml(field.key)}">${escapeHtml(label)}</label>
+                <input id="signUpField_${escapeHtml(field.key)}" type="${escapeHtml(field.inputType || "text")}" class="form-control" placeholder="${escapeHtml(placeholder)}" autocomplete="${escapeHtml(field.autocomplete || "off")}" value="${escapeHtml(defaultValue)}">
+              </div>`;
+        }).join("");
+
+        return `
+          <section class="signup-field-section">
+            <h3 class="content-header">${escapeHtml(sectionTitle)}</h3>
+            ${fieldMarkup}
+          </section>`;
+    }).join("");
+}
+
+function collectSignUpStructuredAttributes() {
+    return (SIGNUP_CONFIG.fields || []).reduce((attributes, field) => {
+        const element = document.getElementById(`signUpField_${field.key}`);
+        if (!element) {
+            return attributes;
+        }
+
+        const value = String(element.value || "").trim();
+        if (value) {
+            attributes[field.key] = value;
+        }
+
+        return attributes;
+    }, {});
+}
+
+function updateSignUpAdvancedToggle() {
+    const wrapper = document.getElementById("signUpAdvancedAttributesWrapper");
+    const toggle = document.getElementById("signUpAdvancedToggle");
+    const panel = document.getElementById("signUpAdvancedAttributesPanel");
+    if (!wrapper || !toggle || !panel) return;
+
+    if (!SIGNUP_CONFIG.showAdvancedJson) {
+        wrapper.classList.add("is-hidden");
+        panel.classList.add("is-hidden");
+        return;
+    }
+
+    wrapper.classList.remove("is-hidden");
+    const expanded = !panel.classList.contains("is-hidden");
+    toggle.textContent = expanded ? tr("signup.advancedToggleHide") : tr("signup.advancedToggleShow");
+}
+
+function toggleSignUpAdvancedAttributes() {
+    const panel = document.getElementById("signUpAdvancedAttributesPanel");
+    if (!panel || !SIGNUP_CONFIG.showAdvancedJson) return;
+
+    panel.classList.toggle("is-hidden");
+    updateSignUpAdvancedToggle();
 }
 
 function openDialog(dialogId, onConfirm) {
@@ -246,10 +352,12 @@ function openDialog(dialogId, onConfirm) {
 }
 
 function openSignUpDialog() {
-    ["signUpEmail", "signUpPassword", "signUpPasswordConfirm", "signUpDisplayName"].forEach((id) => {
+    ["signUpEmail", "signUpPassword", "signUpPasswordConfirm"].forEach((id) => {
         const element = document.getElementById(id);
         if (element) element.value = "";
     });
+
+    renderSignUpFields();
 
     const attributesInput = document.getElementById("signUpAttributesJson");
     if (attributesInput) {
@@ -257,12 +365,13 @@ function openSignUpDialog() {
     }
 
     updateSignUpAttributeHint();
+    updateSignUpAdvancedToggle();
 
     return openDialog("signUpDialog", async () => {
         const email = document.getElementById("signUpEmail").value.trim();
         const password = document.getElementById("signUpPassword").value;
         const confirmPassword = document.getElementById("signUpPasswordConfirm").value;
-        const displayName = document.getElementById("signUpDisplayName").value.trim();
+        const structuredAttributes = collectSignUpStructuredAttributes();
         const rawAttributes = document.getElementById("signUpAttributesJson").value.trim();
 
         if (!email || !password) {
@@ -272,7 +381,7 @@ function openSignUpDialog() {
             throw new Error(tr("msg.passwordsDoNotMatch"));
         }
 
-        const attributes = mergeSignUpAttributes(rawAttributes, displayName);
+        const attributes = mergeSignUpAttributes(rawAttributes, structuredAttributes);
         const missingAttributes = getMissingRequiredSignUpAttributes(attributes);
         if (missingAttributes.length > 0) {
             throw new Error(tr("msg.missingRequiredAttributes", { attributes: missingAttributes.join(", ") }));
@@ -322,6 +431,9 @@ function openForgotEmailDialog() {
 window.openSignUpDialog = openSignUpDialog;
 window.openResetPasswordDialog = openResetPasswordDialog;
 window.openForgotEmailDialog = openForgotEmailDialog;
+window.toggleSignUpAdvancedAttributes = toggleSignUpAdvancedAttributes;
+window.collectSignUpStructuredAttributes = collectSignUpStructuredAttributes;
+window.renderSignUpFields = renderSignUpFields;
 
 async function recoverEmailByPhone(phoneNumber) {
     clearLoginNotice();

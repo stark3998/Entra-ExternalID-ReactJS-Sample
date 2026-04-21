@@ -10,6 +10,20 @@ function parseCsvConfig(value) {
     .filter(Boolean);
 }
 
+function parseJsonConfig(value, fallback = {}) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : fallback;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
 const DEFAULTS = {
   clientId: "YOUR_CLIENT_ID",
   tenantId: "YOUR_TENANT_ID",
@@ -37,10 +51,98 @@ const DEFAULTS = {
     "externalUserState",
     "externalUserStateChangeDateTime",
   ],
+  signupEnabledAttributes: ["displayName"],
   signupRequiredAttributes: [],
+  signupShowAdvancedJson: false,
+  signupFieldOverrides: {},
   signupAttributeTemplate: "",
   lookupRecoveryEnabled: false,
   lookupDisclosureMode: 'masked-email',
+};
+
+const SIGNUP_SECTION_ORDER = ["personal", "contact", "address", "work", "other"];
+
+const SIGNUP_FIELD_CATALOG = {
+  displayName: {
+    key: "displayName",
+    labelKey: "signup.field.displayName.label",
+    placeholderKey: "signup.field.displayName.placeholder",
+    section: "personal",
+    inputType: "text",
+    autocomplete: "name",
+  },
+  givenName: {
+    key: "givenName",
+    labelKey: "signup.field.givenName.label",
+    placeholderKey: "signup.field.givenName.placeholder",
+    section: "personal",
+    inputType: "text",
+    autocomplete: "given-name",
+  },
+  surname: {
+    key: "surname",
+    labelKey: "signup.field.surname.label",
+    placeholderKey: "signup.field.surname.placeholder",
+    section: "personal",
+    inputType: "text",
+    autocomplete: "family-name",
+  },
+  username: {
+    key: "username",
+    labelKey: "signup.field.username.label",
+    placeholderKey: "signup.field.username.placeholder",
+    section: "contact",
+    inputType: "text",
+    autocomplete: "username",
+  },
+  city: {
+    key: "city",
+    labelKey: "signup.field.city.label",
+    placeholderKey: "signup.field.city.placeholder",
+    section: "address",
+    inputType: "text",
+    autocomplete: "address-level2",
+  },
+  country: {
+    key: "country",
+    labelKey: "signup.field.country.label",
+    placeholderKey: "signup.field.country.placeholder",
+    section: "address",
+    inputType: "text",
+    autocomplete: "country-name",
+  },
+  postalCode: {
+    key: "postalCode",
+    labelKey: "signup.field.postalCode.label",
+    placeholderKey: "signup.field.postalCode.placeholder",
+    section: "address",
+    inputType: "text",
+    autocomplete: "postal-code",
+  },
+  state: {
+    key: "state",
+    labelKey: "signup.field.state.label",
+    placeholderKey: "signup.field.state.placeholder",
+    section: "address",
+    inputType: "text",
+    autocomplete: "address-level1",
+  },
+  streetAddress: {
+    key: "streetAddress",
+    labelKey: "signup.field.streetAddress.label",
+    placeholderKey: "signup.field.streetAddress.placeholder",
+    section: "address",
+    inputType: "text",
+    autocomplete: "street-address",
+  },
+  jobTitle: {
+    key: "jobTitle",
+    labelKey: "signup.field.jobTitle.label",
+    placeholderKey: "signup.field.jobTitle.placeholder",
+    section: "work",
+    inputType: "text",
+    autocomplete: "organization-title",
+  },
 };
 
 function trimTrailingSlash(value) {
@@ -79,9 +181,25 @@ const NATIVE_AUTH = {
 };
 
 const SIGNUP_CONFIG = {
+  enabledAttributes: parseCsvConfig(runtimeConfig.SIGNUP_ENABLED_ATTRIBUTES || DEFAULTS.signupEnabledAttributes.join(",")).filter((attributeName) => Object.prototype.hasOwnProperty.call(SIGNUP_FIELD_CATALOG, attributeName)),
   requiredAttributes: parseCsvConfig(runtimeConfig.SIGNUP_REQUIRED_ATTRIBUTES || DEFAULTS.signupRequiredAttributes.join(",")),
+  showAdvancedJson: String(runtimeConfig.SIGNUP_SHOW_ADVANCED_JSON).toLowerCase() === "true" || DEFAULTS.signupShowAdvancedJson,
+  fieldOverrides: parseJsonConfig(runtimeConfig.SIGNUP_FIELD_OVERRIDES, DEFAULTS.signupFieldOverrides),
   attributeTemplate: String(runtimeConfig.SIGNUP_ATTRIBUTE_TEMPLATE || DEFAULTS.signupAttributeTemplate || ""),
 };
+
+SIGNUP_CONFIG.fields = SIGNUP_CONFIG.enabledAttributes.map((attributeName) => {
+  const baseDefinition = SIGNUP_FIELD_CATALOG[attributeName];
+  const override = SIGNUP_CONFIG.fieldOverrides[attributeName] || {};
+  return {
+    ...baseDefinition,
+    ...override,
+    key: attributeName,
+    section: override.section || baseDefinition.section,
+  };
+});
+
+SIGNUP_CONFIG.sectionOrder = SIGNUP_SECTION_ORDER.slice();
 
 const GRAPH_PROFILE_SELECT_FIELDS = parseCsvConfig(
   runtimeConfig.GRAPH_PROFILE_SELECT_FIELDS || DEFAULTS.graphProfileSelectFields.join(",")

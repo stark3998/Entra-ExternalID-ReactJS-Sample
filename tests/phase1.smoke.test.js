@@ -169,6 +169,59 @@ test('native auth enforces required sign-up attributes from runtime config', () 
   assert.deepEqual(Array.from(sandbox.getMissingRequiredSignUpAttributes(attributes)), ['city']);
 });
 
+test('config normalizes enabled signup fields and advanced JSON visibility', () => {
+  const sandbox = createSandbox({
+    __APP_CONFIG__: {
+      SIGNUP_ENABLED_ATTRIBUTES: 'displayName,givenName,postalCode,unknownField',
+      SIGNUP_REQUIRED_ATTRIBUTES: 'displayName,postalCode',
+      SIGNUP_SHOW_ADVANCED_JSON: true,
+      SIGNUP_FIELD_OVERRIDES: '{"postalCode":{"section":"address","defaultValue":"98052"}}',
+    },
+  });
+  runScript(sandbox, 'public/js/config.js');
+
+  const signupConfig = evaluate(sandbox, 'SIGNUP_CONFIG');
+  assert.deepEqual(Array.from(signupConfig.enabledAttributes), ['displayName', 'givenName', 'postalCode']);
+  assert.equal(signupConfig.showAdvancedJson, true);
+  assert.equal(signupConfig.fields.find((field) => field.key === 'postalCode').defaultValue, '98052');
+});
+
+test('collect signup structured attributes returns only populated configured fields', () => {
+  const sandbox = createSandbox({
+    __APP_CONFIG__: {
+      SIGNUP_ENABLED_ATTRIBUTES: 'displayName,city,username',
+    },
+  });
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/i18n.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
+
+  sandbox.document.getElementById('signUpField_displayName').value = 'Ada Lovelace';
+  sandbox.document.getElementById('signUpField_city').value = 'Seattle';
+  sandbox.document.getElementById('signUpField_username').value = '';
+
+  const attributes = sandbox.collectSignUpStructuredAttributes();
+  assert.deepEqual(JSON.parse(JSON.stringify(attributes)), { displayName: 'Ada Lovelace', city: 'Seattle' });
+});
+
+test('advanced signup attributes override structured field values', () => {
+  const sandbox = createSandbox();
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/i18n.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
+
+  const attributes = sandbox.mergeSignUpAttributes('{"displayName":"Grace Hopper","postalCode":"98052"}', {
+    displayName: 'Ada Lovelace',
+    city: 'Seattle',
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(attributes)), {
+    displayName: 'Grace Hopper',
+    city: 'Seattle',
+    postalCode: '98052',
+  });
+});
+
 test('sign-up start posts password and attributes to the signup start endpoint', async () => {
   const calls = [];
   const sandbox = createSandbox({

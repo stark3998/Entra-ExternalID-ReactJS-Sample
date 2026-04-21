@@ -1080,12 +1080,15 @@
       <div class="form-group">
         <input id="signUpPasswordConfirm" type="password" class="form-control" placeholder="Confirm password" data-i18n-placeholder="signup.confirmPasswordPlaceholder" autocomplete="new-password">
       </div>
-      <div class="form-group">
-        <input id="signUpDisplayName" type="text" class="form-control" placeholder="Display name" data-i18n-placeholder="signup.displayNamePlaceholder" autocomplete="name">
-      </div>
-      <div class="form-group">
-        <textarea id="signUpAttributesJson" class="form-control form-control-textarea" placeholder='{"postalCode":"98052"}' data-i18n-placeholder="signup.attributesPlaceholder"></textarea>
-        <div id="signUpAttributesHint" class="field-help is-hidden"></div>
+      <div id="signUpDynamicFields"></div>
+      <div id="signUpAdvancedAttributesWrapper" class="is-hidden">
+        <button id="signUpAdvancedToggle" type="button" class="btn-inline-link" onclick="toggleSignUpAdvancedAttributes()">Advanced attributes</button>
+        <div id="signUpAdvancedAttributesPanel" class="is-hidden">
+          <div class="form-group">
+            <textarea id="signUpAttributesJson" class="form-control form-control-textarea" placeholder='{"postalCode":"98052"}' data-i18n-placeholder="signup.attributesPlaceholder"></textarea>
+            <div id="signUpAttributesHint" class="field-help is-hidden"></div>
+          </div>
+        </div>
       </div>
       <button id="signUpConfirmBtn" value="default" type="submit" class="btn btn-primary mfa-btn"><span data-i18n="signup.submit">Create account</span></button>
       <button id="signUpCancelBtn" type="reset" class="btn btn-outline-secondary mfa-btn-cancel"><span data-i18n="dialog.cancel">Cancel</span></button>
