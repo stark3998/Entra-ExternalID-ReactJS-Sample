@@ -125,8 +125,30 @@ test('config exposes Phase 1 native auth endpoints and Graph split', () => {
 
   assert.equal(env.urlSignupStart.endsWith('/signup/v1.0/start'), true);
   assert.equal(env.urlResetPasswordPollCompletion.endsWith('/resetpassword/v1.0/poll_completion'), true);
+  assert.equal(env.urlEmailRecoveryByPhone, '/account-recovery/email-by-phone');
   assert.equal(typeof selfServiceEndpoints.me, 'string');
   assert.equal(typeof operatorEndpoints.userDetail, 'function');
+});
+
+test('forgot email recovery posts phone number to backend route', async () => {
+  const calls = [];
+  const sandbox = createSandbox({
+    postRequest: async (url, payload, context) => {
+      calls.push({ url, payload, context });
+      return { matched: true, message: 'We found an account for that phone number: m****@example.com' };
+    },
+    clearLoginNotice() {},
+    setLoginNotice() {},
+    showErrorDiagnostics() {},
+  });
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/nativeAuth.js');
+
+  const response = await sandbox.recoverEmailByPhone('+1 202-555-1234');
+  assert.equal(response.matched, true);
+  assert.equal(calls[0].url, '/account-recovery/email-by-phone');
+  assert.equal(calls[0].payload.phone_number, '+1 202-555-1234');
+  assert.equal(calls[0].context.flowName, 'account-recovery');
 });
 
 test('native auth enforces required sign-up attributes from runtime config', () => {

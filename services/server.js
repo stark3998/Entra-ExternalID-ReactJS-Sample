@@ -1,13 +1,20 @@
 /* eslint-disable no-console */
 
+const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
 const proxyConfig = require('../config/proxy.config');
 
 const app = express();
 const port = Number(process.env.APP_PORT || 8080);
+const lookupAttempts = new Map();
+const DEFAULT_LOOKUP_WINDOW_MS = 15 * 60 * 1000;
+const DEFAULT_LOOKUP_MAX_ATTEMPTS = 5;
 //const msalBrowserLibrary = path.dirname(require.resolve('@azure/msal-browser/package.json'));
 //const msalLibrary = path.resolve(path.dirname(require.resolve('@azure/msal-browser')), '..', 'dist');
+
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 // preserves query parameters
 function redirectToOrigin(req, res, next) {
@@ -27,9 +34,217 @@ function isGuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  return String(value).toLowerCase() === 'true';
+}
+
+function normalizeEnum(value, allowed, fallback) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return allowed.has(normalized) ? normalized : fallback;
+}
+
+function getLookupConfig() {
+  return {
+    enabled: parseBoolean(process.env.LOOKUP_RECOVERY_ENABLED, false),
+    tenantId: process.env.LOOKUP_APP_TENANT_ID || process.env.TENANT_ID || proxyConfig.tenantId,
+    clientId: process.env.LOOKUP_APP_CLIENT_ID || '',
+    clientSecret: process.env.LOOKUP_APP_CLIENT_SECRET || '',
+    graphScope: process.env.LOOKUP_GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
+    disclosureMode: normalizeEnum(process.env.LOOKUP_DISCLOSURE_MODE, new Set(['full-email', 'masked-email', 'generic-recovery-message']), 'masked-email'),
+    phoneSource: normalizeEnum(process.env.LOOKUP_PHONE_SOURCE, new Set(['mobilephone', 'businessphones', 'profile']), 'mobilephone'),
+    rateLimitWindowMs: Number(process.env.LOOKUP_RECOVERY_WINDOW_MS || DEFAULT_LOOKUP_WINDOW_MS),
+    maxAttemptsPerWindow: Number(process.env.LOOKUP_RECOVERY_MAX_ATTEMPTS || DEFAULT_LOOKUP_MAX_ATTEMPTS),
+  };
+}
+
+function normalizePhoneNumber(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const normalized = trimmed
+    .replace(/[\s().-]/g, '')
+    .replace(/^00/, '+');
+
+  if (normalized.startsWith('+')) {
+    return `+${normalized.slice(1).replace(/\D/g, '')}`;
+  }
+
+  return normalized.replace(/\D/g, '');
+}
+
+function hashLookupValue(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex').slice(0, 12);
+}
+
+function maskEmail(email) {
+  const [localPart, domain] = String(email || '').split('@');
+  if (!localPart || !domain) {
+    return '';
+  }
+
+  const maskedLocal = `${localPart[0]}${'*'.repeat(Math.max(localPart.length - 1, 1))}`;
+  const domainParts = domain.split('.');
+  const domainName = domainParts.shift() || '';
+  const maskedDomain = `${domainName[0] || '*'}${'*'.repeat(Math.max(domainName.length - 1, 1))}`;
+  return `${maskedLocal}@${maskedDomain}${domainParts.length > 0 ? `.${domainParts.join('.')}` : ''}`;
+}
+
+function createLookupResponse(matchEmail, lookupConfig, fallbackReason = 'generic') {
+  const genericMessage = 'If an account matches that phone number, recovery details are now available.';
+
+  if (!matchEmail) {
+    return {
+      matched: false,
+      disclosureMode: lookupConfig.disclosureMode,
+      message: genericMessage,
+      reason: fallbackReason,
+    };
+  }
+
+  if (lookupConfig.disclosureMode === 'full-email') {
+    return {
+      matched: true,
+      disclosureMode: lookupConfig.disclosureMode,
+      email: matchEmail,
+      message: `We found an account for that phone number: ${matchEmail}`,
+    };
+  }
+
+  if (lookupConfig.disclosureMode === 'masked-email') {
+    const masked = maskEmail(matchEmail);
+    return {
+      matched: true,
+      disclosureMode: lookupConfig.disclosureMode,
+      email: masked,
+      message: `We found an account for that phone number: ${masked}`,
+    };
+  }
+
+  return {
+    matched: true,
+    disclosureMode: lookupConfig.disclosureMode,
+    message: genericMessage,
+  };
+}
+
+function getLookupCandidatePhones(user, phoneSource) {
+  const candidates = [];
+
+  if ((phoneSource === 'mobilephone' || phoneSource === 'profile') && user.mobilePhone) {
+    candidates.push(user.mobilePhone);
+  }
+
+  if ((phoneSource === 'businessphones' || phoneSource === 'profile') && Array.isArray(user.businessPhones)) {
+    candidates.push(...user.businessPhones);
+  }
+
+  return candidates
+    .map(normalizePhoneNumber)
+    .filter(Boolean);
+}
+
+function resolveLookupEmail(user) {
+  return user.mail || user.userPrincipalName || '';
+}
+
+async function fetchGraphAccessToken(lookupConfig) {
+  const body = new URLSearchParams({
+    client_id: lookupConfig.clientId,
+    client_secret: lookupConfig.clientSecret,
+    grant_type: 'client_credentials',
+    scope: lookupConfig.graphScope,
+  });
+
+  const response = await fetch(`https://login.microsoftonline.com/${lookupConfig.tenantId}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+
+  const payload = await response.json();
+  if (!response.ok || !payload.access_token) {
+    const error = new Error(payload.error_description || 'Failed to acquire Microsoft Graph access token.');
+    error.details = payload;
+    throw error;
+  }
+
+  return payload.access_token;
+}
+
+async function fetchUsersByPhone(normalizedPhone, lookupConfig) {
+  const accessToken = await fetchGraphAccessToken(lookupConfig);
+  const matches = [];
+  let nextUrl = 'https://graph.microsoft.com/v1.0/users?$select=id,mail,userPrincipalName,mobilePhone,businessPhones&$top=999';
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      const error = new Error(payload.error?.message || 'Failed to query Microsoft Graph users.');
+      error.details = payload;
+      throw error;
+    }
+
+    for (const user of payload.value || []) {
+      const candidatePhones = getLookupCandidatePhones(user, lookupConfig.phoneSource);
+      if (candidatePhones.includes(normalizedPhone)) {
+        matches.push({
+          id: user.id,
+          email: resolveLookupEmail(user),
+        });
+      }
+    }
+
+    nextUrl = payload['@odata.nextLink'] || '';
+  }
+
+  return matches.filter((match) => Boolean(match.email));
+}
+
+function evaluateLookupThrottle(request, lookupConfig) {
+  const remoteAddress = request.ip || request.connection?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const currentEntries = (lookupAttempts.get(remoteAddress) || [])
+    .filter((timestamp) => now - timestamp < lookupConfig.rateLimitWindowMs);
+
+  currentEntries.push(now);
+  lookupAttempts.set(remoteAddress, currentEntries);
+
+  return currentEntries.length > lookupConfig.maxAttemptsPerWindow;
+}
+
+async function lookupEmailByPhone(phoneNumber, lookupConfig) {
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+  if (!normalizedPhone || normalizedPhone.length < 8) {
+    return createLookupResponse('', lookupConfig, 'invalid');
+  }
+
+  const matches = await fetchUsersByPhone(normalizedPhone, lookupConfig);
+  if (matches.length !== 1) {
+    return createLookupResponse('', lookupConfig, matches.length > 1 ? 'duplicate' : 'not-found');
+  }
+
+  return createLookupResponse(matches[0].email, lookupConfig, 'match');
+}
+
 function validateConfig() {
   const tenantId = process.env.TENANT_ID || proxyConfig.tenantId;
   const clientId = process.env.CLIENT_ID || proxyConfig.clientId;
+  const lookupConfig = getLookupConfig();
   const errors = [];
   const warnings = [];
 
@@ -47,6 +262,20 @@ function validateConfig() {
 
   if (isPlaceholder(process.env.TENANT_SUBDOMAIN || proxyConfig.tenantSubdomain)) {
     errors.push('TENANT_SUBDOMAIN is missing or still set to a placeholder value.');
+  }
+
+  if (lookupConfig.enabled) {
+    if (isPlaceholder(lookupConfig.clientId)) {
+      errors.push('LOOKUP_APP_CLIENT_ID is missing or still set to a placeholder value.');
+    }
+
+    if (isPlaceholder(lookupConfig.tenantId)) {
+      errors.push('LOOKUP_APP_TENANT_ID is missing or still set to a placeholder value.');
+    }
+
+    if (isPlaceholder(lookupConfig.clientSecret)) {
+      errors.push('LOOKUP_APP_CLIENT_SECRET is missing or still set to a placeholder value.');
+    }
   }
 
   return { errors, warnings };
@@ -82,6 +311,7 @@ function getEffectiveConfig() {
   const signupRequiredAttributes = process.env.SIGNUP_REQUIRED_ATTRIBUTES || '';
   const signupAttributeTemplate = process.env.SIGNUP_ATTRIBUTE_TEMPLATE || '';
   const graphProfileSelectFields = process.env.GRAPH_PROFILE_SELECT_FIELDS || '';
+  const lookupConfig = getLookupConfig();
 
   return {
     runtimeConfig: {
@@ -104,6 +334,8 @@ function getEffectiveConfig() {
       SIGNUP_REQUIRED_ATTRIBUTES: signupRequiredAttributes,
       SIGNUP_ATTRIBUTE_TEMPLATE: signupAttributeTemplate,
       GRAPH_PROFILE_SELECT_FIELDS: graphProfileSelectFields,
+      LOOKUP_RECOVERY_ENABLED: lookupConfig.enabled,
+      LOOKUP_DISCLOSURE_MODE: lookupConfig.disclosureMode,
     },
     settingsView: {
       APP_PORT: String(port),
@@ -133,6 +365,12 @@ function getEffectiveConfig() {
       GRAPH_PROFILE_SELECT_FIELDS: graphProfileSelectFields,
       LOGIN_SCOPES: loginScopes.join(','),
       ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '',
+      LOOKUP_RECOVERY_ENABLED: String(lookupConfig.enabled),
+      LOOKUP_DISCLOSURE_MODE: lookupConfig.disclosureMode,
+      LOOKUP_PHONE_SOURCE: lookupConfig.phoneSource,
+      LOOKUP_GRAPH_SCOPE: lookupConfig.graphScope,
+      LOOKUP_APP_CLIENT_ID: lookupConfig.clientId,
+      LOOKUP_APP_TENANT_ID: lookupConfig.tenantId,
     },
   };
 }
@@ -159,6 +397,38 @@ app.get('/app-config.js', (_req, res) => {
 app.get('/settings-config.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json(getEffectiveConfig().settingsView);
+});
+
+app.post('/account-recovery/email-by-phone', async (req, res) => {
+  const lookupConfig = getLookupConfig();
+  if (!lookupConfig.enabled) {
+    res.status(404).json({
+      matched: false,
+      disclosureMode: lookupConfig.disclosureMode,
+      message: 'Phone-based account recovery is not enabled.',
+      reason: 'disabled',
+    });
+    return;
+  }
+
+  if (evaluateLookupThrottle(req, lookupConfig)) {
+    const throttledResponse = createLookupResponse('', lookupConfig, 'throttled');
+    console.warn(`[phone-recovery] throttled ip=${req.ip || 'unknown'}`);
+    res.status(429).json(throttledResponse);
+    return;
+  }
+
+  const phoneNumber = req.body?.phone_number || req.body?.phoneNumber || '';
+  const phoneHash = hashLookupValue(normalizePhoneNumber(phoneNumber));
+
+  try {
+    const result = await lookupEmailByPhone(phoneNumber, lookupConfig);
+    console.info(`[phone-recovery] outcome=${result.reason || 'match'} phoneHash=${phoneHash}`);
+    res.json(result);
+  } catch (error) {
+    console.error(`[phone-recovery] failed phoneHash=${phoneHash}`, error.details || error.message || error);
+    res.status(502).json(createLookupResponse('', lookupConfig, 'lookup-failed'));
+  }
 });
 
 app.use(express.static('./public')); // app html

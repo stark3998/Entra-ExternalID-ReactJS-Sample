@@ -907,6 +907,7 @@
           <div class="secondary-flow-actions">
             <button type="button" onclick="openSignUpDialog()" class="btn-inline-link" data-i18n="login.signup">Create account</button>
             <button type="button" onclick="openResetPasswordDialog()" class="btn-inline-link" data-i18n="login.forgotPassword">Forgot password?</button>
+            <button type="button" onclick="openForgotEmailDialog()" class="btn-inline-link">Forgot email?</button>
           </div>
 
           <button type="button" onclick="loginInternal()" class="btn btn-primary flow-btn is-hidden">
@@ -1106,6 +1107,18 @@
       </div>
       <button id="resetPasswordConfirmBtn" value="default" type="submit" class="btn btn-primary mfa-btn"><span data-i18n="reset.submit">Reset password</span></button>
       <button id="resetPasswordCancelBtn" type="reset" class="btn btn-outline-secondary mfa-btn-cancel"><span data-i18n="dialog.cancel">Cancel</span></button>
+    </form>
+  </dialog>
+
+  <dialog id="forgotEmailDialog" class="mfa-dialog">
+    <form method="dialog" class="mfa-dialog-inner">
+      <h2 class="title">Find your email</h2>
+      <p class="content-header">Enter the phone number saved on your account.</p>
+      <div class="form-group">
+        <input id="forgotEmailPhone" type="tel" class="form-control" placeholder="Phone number" autocomplete="tel">
+      </div>
+      <button id="forgotEmailConfirmBtn" value="default" type="submit" class="btn btn-primary mfa-btn"><span>Find email</span></button>
+      <button id="forgotEmailCancelBtn" type="reset" class="btn btn-outline-secondary mfa-btn-cancel"><span data-i18n="dialog.cancel">Cancel</span></button>
     </form>
   </dialog>
 

@@ -303,8 +303,48 @@ function openResetPasswordDialog() {
     });
 }
 
+function openForgotEmailDialog() {
+    const phoneInput = document.getElementById('forgotEmailPhone');
+    if (phoneInput) {
+        phoneInput.value = '';
+    }
+
+    return openDialog('forgotEmailDialog', async () => {
+        const phoneNumber = document.getElementById('forgotEmailPhone').value.trim();
+        if (!phoneNumber) {
+            throw new Error('Enter the phone number used on the account.');
+        }
+
+        await recoverEmailByPhone(phoneNumber);
+    });
+}
+
 window.openSignUpDialog = openSignUpDialog;
 window.openResetPasswordDialog = openResetPasswordDialog;
+window.openForgotEmailDialog = openForgotEmailDialog;
+
+async function recoverEmailByPhone(phoneNumber) {
+    clearLoginNotice();
+
+    try {
+        const response = await postRequest(ENV.urlEmailRecoveryByPhone, {
+            phone_number: phoneNumber,
+        }, {
+            flowName: 'account-recovery',
+            flowStep: 'email-by-phone',
+        });
+
+        const severity = response.matched ? 'success' : 'info';
+        setLoginNotice(severity, response.message || 'If an account matches that phone number, recovery details are now available.');
+        return response;
+    } catch (err) {
+        setLoginNotice('error', err.error_description || err.message || 'Phone-based account recovery failed.');
+        showErrorDiagnostics(err);
+        throw err;
+    }
+}
+
+window.recoverEmailByPhone = recoverEmailByPhone;
 
 async function signUp({ email, password, attributes }) {
     interactionType = "native";

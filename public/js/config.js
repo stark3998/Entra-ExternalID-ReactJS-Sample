@@ -39,6 +39,8 @@ const DEFAULTS = {
   ],
   signupRequiredAttributes: [],
   signupAttributeTemplate: "",
+  lookupRecoveryEnabled: false,
+  lookupDisclosureMode: 'masked-email',
 };
 
 function trimTrailingSlash(value) {
@@ -65,6 +67,8 @@ const BASE_API_URL = resolvedBaseApiUrl;
 const DEMO_MODE_DEFAULT = String(runtimeConfig.DEMO_MODE).toLowerCase() === "true" || DEFAULTS.demoMode;
 const ENABLE_OPERATOR_MODE = String(runtimeConfig.ENABLE_OPERATOR_MODE).toLowerCase() === "true" || DEFAULTS.enableOperatorMode;
 const ENABLE_BETA_GRAPH = String(runtimeConfig.ENABLE_BETA_GRAPH).toLowerCase() === "true" || DEFAULTS.enableBetaGraph;
+const LOOKUP_RECOVERY_ENABLED = String(runtimeConfig.LOOKUP_RECOVERY_ENABLED).toLowerCase() === 'true' || DEFAULTS.lookupRecoveryEnabled;
+const LOOKUP_DISCLOSURE_MODE = String(runtimeConfig.LOOKUP_DISCLOSURE_MODE || DEFAULTS.lookupDisclosureMode);
 
 const NATIVE_AUTH = {
   scopes: runtimeConfig.NATIVE_AUTH_SCOPES || DEFAULTS.nativeAuthScopes,
@@ -102,6 +106,7 @@ const ENV = {
   urlResetPasswordContinue: `${BASE_API_URL}/resetpassword/v1.0/continue`,
   urlResetPasswordSubmit: `${BASE_API_URL}/resetpassword/v1.0/submit`,
   urlResetPasswordPollCompletion: `${BASE_API_URL}/resetpassword/v1.0/poll_completion`,
+  urlEmailRecoveryByPhone: '/account-recovery/email-by-phone',
 };
 
 const loginRequest = {
