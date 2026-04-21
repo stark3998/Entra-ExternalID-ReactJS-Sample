@@ -1,3 +1,8 @@
+const path = require("path");
+const dotenv = require("dotenv");
+
+dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
+
 const DEFAULTS = {
     tenantSubdomain: "codexjay",
     tenantId: "78a77549-78e5-49f7-a870-9efbb0d32d91",
