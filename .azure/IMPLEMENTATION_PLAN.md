@@ -1,8 +1,22 @@
 # Entra Identity One-Stop Solution - Implementation Plan
 
 **Date:** April 17, 2026  
-**Status:** Planned  
+**Status:** In Progress (Phase 1 largely implemented)  
 **Estimated Duration:** 12-16 weeks (phased)  
+
+## Current Delivery Snapshot (April 2026)
+
+The repository has already implemented major portions of the original plan, including:
+
+- Native Auth sign-up flow (`/signup/v1.0/start|challenge|continue` + token continuation completion)
+- Native Auth self-service password reset flow (`/resetpassword/v1.0/start|challenge|continue|submit|poll_completion`)
+- Structured diagnostics and error metadata capture in auth HTTP flows
+- Local CORS proxy hardening (CORS headers on success/error/404, env-driven target, optional insecure TLS toggle)
+- Env auto-loading for both app and proxy startup paths
+- Backend phone-based account recovery endpoint using Graph app-permission flow
+- Env-driven sign-up UI customization (enabled attributes, grouped dynamic fields, advanced JSON editor toggle)
+
+Remaining roadmap items in this document should be treated as backlog/expansion beyond the currently shipped baseline.
 
 ---
 
@@ -20,7 +34,7 @@ The plan is organized in three phases:
 ## Phase 1: Core Identity Flows & Security (Weeks 1-4)
 
 ### Goals
-- Complete the identity trinity: sign-in ✅, sign-up ⬜, sign-out/SSPR ⬜
+- Complete the identity trinity: sign-in ✅, sign-up ✅, sign-out/SSPR ✅
 - Hardened token and session handling
 - Enterprise-grade error reporting and troubleshooting
 - Foundation for all future features

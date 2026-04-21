@@ -10,6 +10,14 @@ This project showcases three sign-in approaches in a single UI:
 
 It also demonstrates self-service sign-up, self-service password reset, MFA challenges, MFA method registration, demo-mode token visibility, and operator-grade diagnostics where supported by tenant policy.
 
+Latest customizations in this repo include:
+
+- Env-driven dynamic sign-up field rendering (grouped sections + optional advanced JSON editor)
+- Phone-based "forgot email" recovery using a backend Graph app-registration flow
+- Runtime configuration endpoints for browser bootstrap and settings inspection
+- Unified app+proxy startup/stop scripts with strict port cleanup
+- Docker single-container run path exposing both app and proxy ports
+
 ## Index
 
 - [Native Auth Flow Deep Dive](#native-auth-flow-deep-dive)
@@ -20,17 +28,27 @@ It also demonstrates self-service sign-up, self-service password reset, MFA chal
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
+- [Fast Feature Checklist](#fast-feature-checklist)
 - [Run Both Services Together](#run-both-services-together)
 - [Docker Deployment](#docker-deployment)
 - [Configuration](#configuration)
+- [Environment Profiles](#environment-profiles)
+- [Feature Customizations](#feature-customizations)
+- [Phone-Based Email Recovery](#phone-based-email-recovery)
+- [Sign-Up Layout Customization](#sign-up-layout-customization)
+- [Manual End-to-End Test Playbook](#manual-end-to-end-test-playbook)
+- [API Verification Commands](#api-verification-commands)
 - [Phase 1 Operator Guide](#phase-1-operator-guide)
 - [Smoke Tests](#smoke-tests)
 - [Graph Client Split](#graph-client-split)
 - [Startup Script Deep Dive](#startup-script-deep-dive)
 - [Repository Deep Dive](#repository-deep-dive)
+- [Demo Scripts](#demo-scripts)
 - [Token Refresh Strategy](#token-refresh-strategy)
 - [Session Behavior](#session-behavior)
 - [Security Notes](#security-notes)
+- [Troubleshooting](#troubleshooting)
+- [Known Limitations](#known-limitations)
 - [Customizing For A New Client](#customizing-for-a-new-client)
 - [License](#license)
 
@@ -333,7 +351,7 @@ Operational implication:
 - Static frontend served by Express
 - Local proxy for Native Auth API calls in development
 - MSAL Browser for popup/redirect flows
-- Axios for Native Auth and Graph calls
+- Fetch-based HTTP client wrappers for Native Auth and Graph calls
 
 ## Project Structure
 
@@ -349,14 +367,16 @@ archive/
 package.json
 public/
   index.html             # Main app UI
-  app.css                # CodexJay styling and responsive layout
-  config.js              # Entra/MSAL and API endpoint configuration
-  httpClient.js          # HTTP helpers
-  ui.js                  # Session, token rendering, auth methods UI
-  nativeAuth.js          # Native Auth + MFA + registration flow
-  msalAuth.js            # MSAL popup and redirect flows
-  app.js                 # App orchestration and logout behavior
+  css/app.css            # CodexJay styling and responsive layout
+  js/config.js           # Entra/MSAL and API endpoint configuration
+  js/httpClient.js       # HTTP helpers
+  js/ui.js               # Session, token rendering, auth methods UI
+  js/nativeAuth.js       # Native Auth + MFA + registration flow
+  js/msalAuth.js         # MSAL popup and redirect flows
+  js/app.js              # App orchestration and logout behavior
   redirect.html          # Redirect landing page for popup/redirect flows
+  settings.html          # Runtime settings inspection page
+  assets/EEID Native Auth.postman_collection.json
 ```
 
 ## Prerequisites
@@ -378,9 +398,32 @@ Recommended delegated scopes for this sample:
 
 ```bash
 npm install
+copy .env.example .env
+npm run dev
+```
+
+Open `http://localhost:8080` after startup.
+
+If you prefer separate processes:
+
+```bash
 npm run start:env
 npm run cors:env
 ```
+
+## Fast Feature Checklist
+
+Use this section to quickly validate major capabilities after initial setup.
+
+1. Open `http://localhost:8080` and confirm login UI renders.
+2. Open sign-up dialog and verify dynamic fields appear.
+3. Complete native sign-up with OTP challenge.
+4. Sign in with native email/password and verify token panel populates.
+5. Trigger reset password flow and complete `poll_completion` stage.
+6. Run MSAL popup sign-in and verify authenticated dashboard.
+7. Open settings page `http://localhost:8080/settings.html` and confirm runtime values.
+8. If enabled, run forgot-email flow with phone recovery.
+9. Run smoke tests: `npm test`.
 
 ## Phase 1 Operator Guide
 
@@ -637,8 +680,207 @@ Key environment variables:
 - `LOGIN_SCOPES`
 - `LOCALE` (for UI language, default `en`)
 - `THEME` (default UI theme: `azure-portal`, `enterprise-blue`, `fintech-slate`)
+- `ALLOW_INSECURE_TLS` (set only for local TLS-inspection troubleshooting)
+
+Runtime config endpoints:
+
+- `GET /app-config.js` (browser bootstrap payload in JS)
+- `GET /settings-config.json` (effective runtime/env JSON)
+- `GET /settings.html` (human-friendly settings UI)
 
 For local development, `PUBLIC_BASE_API_URL` should usually point to `http://localhost:3001/api`.
+
+## Environment Profiles
+
+Recommended `.env` profiles for common scenarios.
+
+### Profile A: Basic Native Auth Demo
+
+- `ENABLE_OPERATOR_MODE=false`
+- `ENABLE_BETA_GRAPH=false`
+- `LOOKUP_RECOVERY_ENABLED=false`
+- `SIGNUP_SHOW_ADVANCED_JSON=false`
+
+### Profile B: Full Operator + Recovery Demo
+
+- `ENABLE_OPERATOR_MODE=true`
+- `ENABLE_BETA_GRAPH=true`
+- `LOOKUP_RECOVERY_ENABLED=true`
+- `LOOKUP_DISCLOSURE_MODE=masked-email` (or `full-email` for controlled demos)
+- `SIGNUP_SHOW_ADVANCED_JSON=true`
+
+### Profile C: Security-Conservative Demo
+
+- `DEMO_MODE=false`
+- `LOOKUP_DISCLOSURE_MODE=generic-recovery-message`
+- Avoid `ALLOW_INSECURE_TLS=true` unless local TLS interception breaks requests
+- Keep production secrets out of `.env.example`
+
+## Feature Customizations
+
+This repo is designed for no-code onboarding of new tenants and demo variants using `.env` values.
+
+Feature toggles and behaviors:
+
+- `DEMO_MODE`: controls token visibility defaults and demo UX behavior
+- `ENABLE_OPERATOR_MODE`: enables operator-only diagnostics and controls
+- `ENABLE_BETA_GRAPH`: enables beta Graph paths used by operator workflows
+- `LOOKUP_RECOVERY_ENABLED`: enables backend phone-to-email recovery endpoint
+- `LOOKUP_DISCLOSURE_MODE`: `full-email`, `masked-email`, or `generic-recovery-message`
+- `LOOKUP_PHONE_SOURCE`: `mobilePhone`, `businessPhones`, or `profile`
+
+## Phone-Based Email Recovery
+
+The app implements a backend recovery endpoint that looks up users by phone in Microsoft Graph using an app registration (client credentials flow).
+
+Endpoint:
+
+- `POST /account-recovery/email-by-phone`
+
+Required env settings:
+
+- `LOOKUP_RECOVERY_ENABLED=true`
+- `LOOKUP_APP_CLIENT_ID`
+- `LOOKUP_APP_CLIENT_SECRET`
+- `LOOKUP_APP_TENANT_ID`
+- `LOOKUP_GRAPH_SCOPE` (default `https://graph.microsoft.com/.default`)
+
+Expected Graph permission model:
+
+- Application permission `User.Read.All` on the lookup app registration
+- Admin consent granted in the target tenant
+
+Operational notes:
+
+- Requests are rate-limited in-memory per source IP
+- Phone values are normalized before comparison
+- Audit logs avoid raw phone/email values by using hashed identifiers
+- Disclosure mode controls whether the response returns full email, masked email, or generic text
+
+## Sign-Up Layout Customization
+
+Sign-up fields are rendered dynamically from runtime configuration.
+
+Primary env variables:
+
+- `SIGNUP_ENABLED_ATTRIBUTES`: comma-separated Entra attribute names to render
+- `SIGNUP_REQUIRED_ATTRIBUTES`: comma-separated attributes enforced before submit
+- `SIGNUP_SHOW_ADVANCED_JSON`: enables advanced raw JSON editor in the dialog
+- `SIGNUP_FIELD_OVERRIDES`: JSON object for per-field overrides (section, defaultValue, etc.)
+- `SIGNUP_ATTRIBUTE_TEMPLATE`: JSON prefill for advanced attributes
+
+Supported built-in sign-up attributes:
+
+- `displayName`
+- `givenName`
+- `surname`
+- `username`
+- `city`
+- `country`
+- `postalCode`
+- `state`
+- `streetAddress`
+- `jobTitle`
+
+Example:
+
+```dotenv
+SIGNUP_ENABLED_ATTRIBUTES=displayName,givenName,surname,username,city,country,postalCode,state,streetAddress,jobTitle
+SIGNUP_SHOW_ADVANCED_JSON=true
+SIGNUP_REQUIRED_ATTRIBUTES=displayName
+SIGNUP_FIELD_OVERRIDES={"postalCode":{"section":"address","defaultValue":"98052"}}
+SIGNUP_ATTRIBUTE_TEMPLATE={"city":"Redmond"}
+```
+
+Behavior notes:
+
+- The email address remains a dedicated sign-up field and is not part of attributes JSON
+- Structured field values and advanced JSON are merged at submit time
+- Advanced JSON keys override conflicting structured field keys
+
+## Manual End-to-End Test Playbook
+
+Run this sequence for a complete repository validation.
+
+### 1. Stack startup
+
+1. `npm run stop`
+2. `npm run dev:plain`
+3. Confirm app listener is up: `http://localhost:8080`
+4. Confirm proxy listener is up: `http://localhost:3001`
+
+### 2. Native sign-up with dynamic attributes
+
+1. Click `Create account`.
+2. Confirm configured dynamic fields are visible.
+3. Enter email/password and optional attributes.
+4. Complete OTP challenge.
+5. Confirm post-sign-up token completion succeeds.
+
+### 3. Native sign-in + refresh
+
+1. Sign in with created account.
+2. Confirm token panel shows access/id token metadata.
+3. If refresh token is present, use refresh action and verify updated timestamps.
+
+### 4. SSPR flow
+
+1. Click reset password path.
+2. Complete challenge and code.
+3. Submit new password.
+4. Confirm completion polling reaches `succeeded`.
+
+### 5. Forgot-email recovery
+
+1. Ensure `LOOKUP_RECOVERY_ENABLED=true`.
+2. Use phone number dialog.
+3. Verify response behavior matches disclosure mode.
+
+### 6. MSAL hosted paths
+
+1. Test popup login.
+2. Test redirect login.
+3. Confirm logout works for each interaction mode.
+
+### 7. Config and diagnostics validation
+
+1. Open `http://localhost:8080/settings.html`.
+2. Verify key env values appear as expected.
+3. Force a known error (bad OTP, wrong password) and verify diagnostics panel includes trace/correlation IDs.
+
+## API Verification Commands
+
+Use these commands from the repo root while services are running.
+
+Check runtime config payload:
+
+```powershell
+curl.exe -s http://localhost:8080/app-config.js
+```
+
+Check settings JSON:
+
+```powershell
+curl.exe -s http://localhost:8080/settings-config.json
+```
+
+Check signup layout markup in served page:
+
+```powershell
+curl.exe -s http://localhost:8080 | Select-String -Pattern "signUpDynamicFields|signUpAdvancedAttributesWrapper|signUpAdvancedToggle|signUpAdvancedAttributesPanel" -Context 0,0 | Out-String
+```
+
+Check phone recovery endpoint:
+
+```powershell
+curl.exe -s -X POST "http://localhost:8080/account-recovery/email-by-phone" -H "Content-Type: application/x-www-form-urlencoded" --data-urlencode "phone_number=2066100282"
+```
+
+Run smoke suite:
+
+```bash
+npm test
+```
 
 ## Startup Script Deep Dive
 
@@ -667,7 +909,7 @@ UI text is centralized in `public/js/i18n.js` and loaded at runtime.
 - Users can switch locale at runtime via `setLocale('en')` or `setLocale('es')` in the browser console
 - Add new languages by extending the `translations` object in `public/js/i18n.js`
 
-### Themeing
+### Theming
 
 The UI supports runtime theme presets for demos.
 
@@ -733,11 +975,94 @@ Logout behavior:
 - Native flow: calls `POST https://graph.microsoft.com/v1.0/me/revokeSignInSessions` then clears session storage
 - MSAL flows: uses `logoutPopup()` or `logoutRedirect()` based on interaction type
 
+## Demo Scripts
+
+Use these ready-made scripts when presenting this repository to clients.
+
+### 5-Minute Demo Script (Executive Overview)
+
+Goal: quickly show breadth of auth experiences and runtime customization.
+
+1. Start stack: `npm run dev:plain`.
+2. Open app: `http://localhost:8080`.
+3. Show the three entry points on one screen: Native Auth, MSAL Popup, and MSAL Redirect.
+4. Open `Create account` dialog and point out dynamic sign-up fields.
+5. Show `Advanced attributes` toggle and explain env-driven behavior.
+6. Run quick sign-in (native or MSAL) and show token panel.
+7. Open `http://localhost:8080/settings.html` to show runtime config with no code changes.
+8. Optional close: show forgot-email phone recovery if enabled.
+
+Talk track:
+
+- "This app demonstrates multiple Entra auth patterns in one reusable shell."
+- "Behavior and form fields are controlled by env values, not code edits."
+- "Operators can validate effective runtime values from the built-in settings view."
+
+### 15-Minute Demo Script (Technical Walkthrough)
+
+Goal: show end-to-end feature depth, operational diagnostics, and testability.
+
+1. Startup and health check: run `npm run stop`, then `npm run dev:plain`, and confirm app (`8080`) and proxy (`3001`) are active.
+2. Sign-up flow walkthrough: open sign-up dialog, highlight configured fields (`SIGNUP_ENABLED_ATTRIBUTES`), and explain `SIGNUP_REQUIRED_ATTRIBUTES`, `SIGNUP_FIELD_OVERRIDES`, and JSON merge behavior.
+3. Native auth sign-in and challenge handling: demonstrate challenge progression and token result, and explain continuation-token sequencing.
+4. SSPR walkthrough: trigger reset password and explain challenge, submit, and `poll_completion` stages.
+5. Phone-based email recovery (if enabled): show lookup dialog, explain disclosure modes (`full-email`, `masked-email`, `generic-recovery-message`), and emphasize backend app-registration security model.
+6. Hosted auth comparison: run MSAL popup or redirect sign-in and compare hosted vs native UX and token handling.
+7. Diagnostics and observability: force a controlled error (bad OTP/password) and show trace/correlation IDs in diagnostics.
+8. Testability close: run `npm test`, explain smoke suite coverage, and show API checks from `API Verification Commands`.
+
+Talk track:
+
+- "Native auth and hosted auth coexist so teams can compare tradeoffs live."
+- "The proxy and runtime config endpoints make local testing deterministic."
+- "Recovery, diagnostics, and smoke tests make this suitable for repeatable demos and handoffs."
+
 ## Security Notes
 
 - The development proxy is for local demos and should not be used as-is in production.
 - Keep app registration secrets and sensitive config out of source control.
 - Validate tenant/app registration permissions before client demos.
+
+## Troubleshooting
+
+### App appears to start, but stack command exits with code 1
+
+- Cause: one child process exits (or stale listeners from another terminal remain), so stack supervisor exits.
+- Fix:
+  1. Run `npm run stop`
+  2. Verify ports are free
+  3. Run `npm run dev:plain` and watch `[APP]` and `[CORS]` logs
+
+### Native auth browser requests fail with CORS error
+
+- Verify proxy is running on `3001`.
+- Verify `PUBLIC_BASE_API_URL=http://localhost:3001/api`.
+- Confirm `services/cors.js` target tenant is correct.
+
+### Runtime config does not reflect recent `.env` edits
+
+- Ensure there are no duplicate keys later in `.env` overriding earlier values.
+- Restart app/proxy after edits (`npm run stop`, then `npm run dev`).
+- Confirm effective values in `http://localhost:8080/settings.html`.
+
+### Phone recovery returns disabled response
+
+- Ensure `LOOKUP_RECOVERY_ENABLED=true`.
+- Confirm lookup app credentials are set.
+- Confirm Graph app-permission `User.Read.All` and admin consent are in place.
+
+### TLS/certificate errors to tenant endpoint in local corporate network
+
+- Keep `ALLOW_INSECURE_TLS=false` by default.
+- For local troubleshooting only, set `ALLOW_INSECURE_TLS=true` and restart.
+
+## Known Limitations
+
+- The local proxy is a development convenience and not a production gateway.
+- Phone lookup throttling is in-memory and resets on process restart.
+- Smoke tests are contract-level and do not replace browser E2E coverage.
+- Some tenant policies can force `redirect` branch behavior even when native challenge types are supplied.
+- Live browser automation/inspection in VS Code depends on local browser tool settings.
 
 ## Customizing For A New Client
 
