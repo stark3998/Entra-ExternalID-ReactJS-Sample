@@ -342,7 +342,7 @@ async function signUp({ email, password, attributes }) {
             oob: oobCode,
         });
 
-        const tokenRes = await issueContinuationTokens(continueRes.continuation_token, email);
+        const tokenRes = await issueContinuationTokens(continueRes.continuation_token);
         setLoginNotice("success", tr("msg.signupSuccess"));
         renderNativeAuthenticatedUI(tokenRes);
     } catch (err) {
@@ -747,7 +747,7 @@ async function signInTokenMFASpecific(request) {
     return await postRequest(ENV.urlOauthToken, payloadExt, { flowName: "signin", flowStep: "token:mfa_oob_specific" });
 }
 
-async function issueContinuationTokens(continuationToken, username) {
+async function issueContinuationTokens(continuationToken) {
     return await postRequest(ENV.urlOauthToken, {
         continuation_token: continuationToken,
         client_id: msalConfig.auth.clientId,
@@ -755,7 +755,6 @@ async function issueContinuationTokens(continuationToken, username) {
         grant_type: "continuation_token",
         scope: NATIVE_AUTH.scopes,
         client_info: "true",
-        username,
     }, { flowName: "native-auth", flowStep: "token:continuation_token" });
 }
 
