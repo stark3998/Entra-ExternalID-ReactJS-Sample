@@ -2,7 +2,9 @@
 
 const crypto = require('crypto');
 const express = require('express');
+const https = require('https');
 const path = require('path');
+const url = require('url');
 const proxyConfig = require('../config/proxy.config');
 
 const app = express();
@@ -10,6 +12,15 @@ const port = Number(process.env.APP_PORT || 8080);
 const lookupAttempts = new Map();
 const DEFAULT_LOOKUP_WINDOW_MS = 15 * 60 * 1000;
 const DEFAULT_LOOKUP_MAX_ATTEMPTS = 5;
+const proxyExtraHeaders = [
+  'x-client-SKU',
+  'x-client-VER',
+  'x-client-OS',
+  'x-client-CPU',
+  'x-client-current-telemetry',
+  'x-client-last-telemetry',
+  'client-request-id',
+];
 //const msalBrowserLibrary = path.dirname(require.resolve('@azure/msal-browser/package.json'));
 //const msalLibrary = path.resolve(path.dirname(require.resolve('@azure/msal-browser')), '..', 'dist');
 
@@ -45,6 +56,68 @@ function parseBoolean(value, fallback = false) {
 function normalizeEnum(value, allowed, fallback) {
   const normalized = String(value || '').trim().toLowerCase();
   return allowed.has(normalized) ? normalized : fallback;
+}
+
+function buildProxyCorsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': `Content-Type, Authorization, ${proxyExtraHeaders.join(', ')}`,
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+function proxyNativeAuthRequest(req, res) {
+  const reqUrl = url.parse(req.url);
+  const targetDomain = url.parse(proxyConfig.proxy).hostname;
+  const corsHeaders = buildProxyCorsHeaders(req.headers.origin);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders);
+    res.end();
+    return;
+  }
+
+  const targetUrl = `${proxyConfig.proxy}${reqUrl.pathname?.replace(proxyConfig.localApiPath, '')}${reqUrl.search || ''}`;
+  const forwardedHeaders = {};
+
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (key !== 'origin') {
+      forwardedHeaders[key] = value;
+    }
+  }
+
+  const proxyReq = https.request(
+    targetUrl,
+    {
+      method: req.method,
+      rejectUnauthorized: !proxyConfig.allowInsecureTls,
+      headers: {
+        ...forwardedHeaders,
+        host: targetDomain,
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, {
+        ...proxyRes.headers,
+        ...corsHeaders,
+      });
+
+      proxyRes.pipe(res);
+    },
+  );
+
+  proxyReq.on('error', (error) => {
+    console.error('Error with the proxy request:', error);
+    res.writeHead(500, {
+      ...corsHeaders,
+      'Content-Type': 'text/plain',
+    });
+    res.end('Proxy error.');
+  });
+
+  req.pipe(proxyReq);
 }
 
 function getLookupConfig() {
@@ -281,8 +354,32 @@ function validateConfig() {
   return { errors, warnings };
 }
 
-function getEffectiveConfig() {
-  const appOrigin = process.env.APP_ORIGIN || `http://localhost:${port}`;
+function getRequestOrigin(req) {
+  const forwardedProto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req?.headers?.['x-forwarded-host'] || '').split(',')[0].trim();
+  const host = req?.headers?.host || forwardedHost || '';
+  const protocol = forwardedProto || req?.protocol || (host.startsWith('localhost') ? 'http' : 'https');
+
+  if (!host) {
+    return '';
+  }
+
+  return `${protocol}://${host}`;
+}
+
+function shouldUseRequestOrigin(configuredValue, requestOrigin) {
+  const configured = String(configuredValue || '').trim();
+  return Boolean(requestOrigin) && (!configured || /localhost/i.test(configured));
+}
+
+function getEffectiveConfig(req) {
+  const requestOrigin = getRequestOrigin(req);
+  const configuredAppOrigin = trimTrailingSlash(process.env.APP_ORIGIN || '');
+  const appOrigin = trimTrailingSlash(
+    shouldUseRequestOrigin(configuredAppOrigin, requestOrigin)
+      ? requestOrigin
+      : configuredAppOrigin || requestOrigin || `http://localhost:${port}`
+  );
   const tenantId = process.env.TENANT_ID || proxyConfig.tenantId;
   const tenantSubdomain = process.env.TENANT_SUBDOMAIN || proxyConfig.tenantSubdomain;
   const authorityHost = process.env.ENTRA_AUTHORITY_HOST || proxyConfig.authorityHost;
@@ -290,14 +387,22 @@ function getEffectiveConfig() {
     process.env.AUTHORITY || `https://${tenantSubdomain}.${authorityHost}/${tenantId}`
   );
   const clientId = process.env.CLIENT_ID || 'YOUR_CLIENT_ID';
+  const configuredBaseApiUrl = trimTrailingSlash(process.env.PUBLIC_BASE_API_URL || '');
   const baseApiUrl = trimTrailingSlash(
-    process.env.PUBLIC_BASE_API_URL || `http://localhost:${proxyConfig.port}${proxyConfig.localApiPath}`
+    shouldUseRequestOrigin(configuredBaseApiUrl, requestOrigin)
+      ? `${appOrigin}${proxyConfig.localApiPath}`
+      : configuredBaseApiUrl || `${appOrigin}${proxyConfig.localApiPath}`
   );
   const loginScopes = (process.env.LOGIN_SCOPES || 'openid,profile,email,UserAuthenticationMethod.Read,UserAuthMethod-Phone.ReadWrite')
     .split(',')
     .map((scope) => scope.trim())
     .filter(Boolean);
-  const redirectUri = process.env.REDIRECT_URI || appOrigin;
+  const configuredRedirectUri = trimTrailingSlash(process.env.REDIRECT_URI || '');
+  const redirectUri = trimTrailingSlash(
+    shouldUseRequestOrigin(configuredRedirectUri, requestOrigin)
+      ? appOrigin
+      : configuredRedirectUri || appOrigin
+  );
   const locale = process.env.LOCALE || 'en';
   const theme = process.env.THEME || 'azure-portal';
   const demoMode = String(process.env.DEMO_MODE || 'false').toLowerCase() === 'true';
@@ -396,7 +501,7 @@ if (validation.errors.length > 0) {
 }
 
 app.get('/app-config.js', (_req, res) => {
-  const runtimeConfig = getEffectiveConfig().runtimeConfig;
+  const runtimeConfig = getEffectiveConfig(_req).runtimeConfig;
 
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -405,8 +510,10 @@ app.get('/app-config.js', (_req, res) => {
 
 app.get('/settings-config.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json(getEffectiveConfig().settingsView);
+  res.json(getEffectiveConfig(_req).settingsView);
 });
+
+app.use(proxyConfig.localApiPath, proxyNativeAuthRequest);
 
 app.post('/account-recovery/email-by-phone', async (req, res) => {
   const lookupConfig = getLookupConfig();

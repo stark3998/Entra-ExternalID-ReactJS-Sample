@@ -1,0 +1,36 @@
+# terraform.tfvars.example
+#
+# Copy this file to terraform.tfvars and fill in the real values.
+# terraform.tfvars is git-ignored — NEVER commit real secrets.
+#
+# Usage:
+#   cp infra/terraform.tfvars.example infra/terraform.tfvars
+#   # then edit terraform.tfvars with real credentials
+#   terraform -chdir=infra init
+#   terraform -chdir=infra plan -out=tfplan
+#   terraform -chdir=infra apply tfplan
+
+# ---------------------------------------------------------------------------
+# REQUIRED — must be set (no defaults)
+# ---------------------------------------------------------------------------
+
+# ACR admin credentials
+# Retrieve with: az acr credential show --name blogwriterdeveus6c2uw5
+acr_username = "blogwriterdeveus6c2uw5"
+acr_password = "REPLACE_WITH_ACR_PASSWORD"
+
+# Lookup app client secret (from .env or Azure Key Vault)
+lookup_app_client_secret = "REPLACE_WITH_LOOKUP_APP_CLIENT_SECRET"
+
+# ---------------------------------------------------------------------------
+# OPTIONAL — defaults are set in variables.tf; override here if needed
+# ---------------------------------------------------------------------------
+
+# client_id            = "90947f60-61f6-4c24-a192-8f5dcbf944ec"
+# tenant_id            = "78a77549-78e5-49f7-a870-9efbb0d32d91"
+# tenant_subdomain     = "codexjay"
+# lookup_app_client_id = "3879af56-4888-43e8-a6ab-46c3ca29c98c"
+# lookup_app_tenant_id = "78a77549-78e5-49f7-a870-9efbb0d32d91"
+# container_image_tag  = "latest"
+# cpu                  = 1
+# memory               = "2Gi"

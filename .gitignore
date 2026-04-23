@@ -22,3 +22,12 @@ yarn-error.log*
 
 .served_app.js
 .env.old
+
+# Terraform — local state, secrets, and provider cache
+infra/terraform.tfvars
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/tfplan
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/crash.log

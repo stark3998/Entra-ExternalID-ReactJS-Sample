@@ -149,15 +149,42 @@ function trimTrailingSlash(value) {
   return String(value || "").replace(/\/+$/, "");
 }
 
+function getBrowserOrigin() {
+  return trimTrailingSlash(window.location.origin || "");
+}
+
+function resolveRedirectUri() {
+  const browserOrigin = getBrowserOrigin();
+  const runtimeRedirect = trimTrailingSlash(runtimeConfig.REDIRECT_URI || "");
+
+  if (!runtimeRedirect || /localhost/i.test(runtimeRedirect)) {
+    return browserOrigin || DEFAULTS.redirectUri;
+  }
+
+  return runtimeRedirect;
+}
+
+function resolveBaseApiUrl() {
+  const browserOrigin = getBrowserOrigin();
+  const runtimeBaseApiUrl = trimTrailingSlash(runtimeConfig.BASE_API_URL || "");
+
+  if (!runtimeBaseApiUrl || /localhost/i.test(runtimeBaseApiUrl)) {
+    return browserOrigin ? `${browserOrigin}/api` : DEFAULTS.baseApiUrl;
+  }
+
+  return runtimeBaseApiUrl;
+}
+
 const resolvedAuthority = trimTrailingSlash(runtimeConfig.AUTHORITY || DEFAULTS.authority);
-const resolvedBaseApiUrl = trimTrailingSlash(runtimeConfig.BASE_API_URL || DEFAULTS.baseApiUrl);
+const resolvedBaseApiUrl = resolveBaseApiUrl();
+const resolvedRedirectUri = resolveRedirectUri();
 
 const msalConfig = {
   auth: {
     clientId: runtimeConfig.CLIENT_ID || DEFAULTS.clientId,
     tenantId: runtimeConfig.TENANT_ID || DEFAULTS.tenantId,
     authority: `${resolvedAuthority}/`,
-    redirectUri: runtimeConfig.REDIRECT_URI || DEFAULTS.redirectUri,
+    redirectUri: resolvedRedirectUri,
   },
   cache: {
     cacheLocation: "localStorage",
