@@ -24,6 +24,9 @@ const proxyExtraHeaders = [
 //const msalBrowserLibrary = path.dirname(require.resolve('@azure/msal-browser/package.json'));
 //const msalLibrary = path.resolve(path.dirname(require.resolve('@azure/msal-browser')), '..', 'dist');
 
+// Keep proxy route before body parsers so request streams remain intact for piping.
+app.use(proxyConfig.localApiPath, proxyNativeAuthRequest);
+
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
@@ -512,8 +515,6 @@ app.get('/settings-config.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json(getEffectiveConfig(_req).settingsView);
 });
-
-app.use(proxyConfig.localApiPath, proxyNativeAuthRequest);
 
 app.post('/account-recovery/email-by-phone', async (req, res) => {
   const lookupConfig = getLookupConfig();
