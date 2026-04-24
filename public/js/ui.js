@@ -1570,6 +1570,11 @@ function renderAuthenticatedUI(authResult) {
     const accessToken = authResult && authResult.accessToken ? authResult.accessToken : "";
     const idToken = authResult && authResult.idToken ? authResult.idToken : "";
 
+    // Store tokens so getSessionTokens() works for MSAL-authenticated sessions (e.g. Add Phone Method)
+    if (accessToken) setSessionItem(SESSION_KEYS.ACCESS_TOKEN, accessToken);
+    if (idToken) setSessionItem(SESSION_KEYS.ID_TOKEN, idToken);
+    setSessionItem(SESSION_KEYS.INTERACTION_TYPE, "msal");
+
     if (typeof window.hasMsalAccount === "function" && window.hasMsalAccount()) {
         setRefreshScheduleIndicator({ mode: "msal", strategy: "silent" });
     }
