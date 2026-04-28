@@ -1204,16 +1204,20 @@ function buildDiagnosticPayload(error) {
 }
 
 function showErrorDiagnostics(error) {
-    const dialog = document.getElementById("errorDialog");
-    const panel = document.getElementById("errorDiagnosticsPanel");
-    if (!dialog || !panel) {
-        const message = error.error_description || error.message || tr("misc.unknownError");
-        alert(message);
+    const payload = buildDiagnosticPayload(error);
+    lastDiagnosticPayload = payload;
+
+    if (isDemoModeEnabled()) {
         return;
     }
 
-    const payload = buildDiagnosticPayload(error);
-    lastDiagnosticPayload = payload;
+    const dialog = document.getElementById("errorDialog");
+    const panel = document.getElementById("errorDiagnosticsPanel");
+    if (!dialog || !panel) {
+        const message = payload.description;
+        alert(message);
+        return;
+    }
 
     panel.innerHTML = [
         `<div class="diagnostic-grid">`,

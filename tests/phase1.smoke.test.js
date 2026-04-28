@@ -281,6 +281,27 @@ test('demo mode toggle persists state in sessionStorage', () => {
   assert.equal(sandbox.isDemoModeEnabled(), true);
 });
 
+test('demo mode suppresses error diagnostics popups', () => {
+  let alertCalls = 0;
+  const sandbox = createSandbox({
+    alert() {
+      alertCalls++;
+    },
+  });
+  runScript(sandbox, 'public/js/config.js');
+  runScript(sandbox, 'public/js/ui.js');
+
+  sandbox.setDemoMode(true, { silent: true });
+  sandbox.showErrorDiagnostics({
+    error: 'invalid_grant',
+    error_description: 'Request failed in demo mode',
+    status: 400,
+  });
+
+  assert.equal(sandbox.document.getElementById('errorDialog').open, undefined);
+  assert.equal(alertCalls, 0);
+});
+
 test('native auth refresh posts refresh_token grant to token endpoint', async () => {
   const calls = [];
   const sandbox = createSandbox({
